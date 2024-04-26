@@ -16,9 +16,11 @@ import net.minecraft.registry.tag.TagKey;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.entry.RegistryEntry;
+import com.village.mod.item.HandBellItem
 
 
 object VillageItems {
+  val HAND_BELL: Item = registerItem("hand_bell",HandBellItem(Item.Settings().maxDamage(64)));
   val EMERALD_TOKEN: Item = registerItem("emerald_token", Item(FabricItemSettings()))
   val EMERALD_BUNDLE: Item = registerItem("emerald_bundle", Item(FabricItemSettings()))
 

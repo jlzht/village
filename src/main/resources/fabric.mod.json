@@ -16,7 +16,8 @@
 	"environment": "*",
 	"entrypoints": {
 		"main": [{"adapter": "kotlin", "value": "com.village.mod.Village"}],
-		"client": [{"adapter": "kotlin", "value": "com.village.mod.VillageClient"}]
+		"client": [{"adapter": "kotlin", "value": "com.village.mod.VillageClient"}],
+		"preLaunch": [{"adapter": "kotlin", "value": "com.village.mod.VillagePreLaunch"}]
 	},
 	"mixins": [
 		"village.mixins.json"
