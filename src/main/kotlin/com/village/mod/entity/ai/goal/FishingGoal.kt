@@ -1,50 +1,45 @@
 package com.village.mod.entity.ai.goal
 
+import com.village.mod.LOGGER
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.village.profession.Fisherman
-import com.village.mod.village.villager.State
-import net.minecraft.entity.LivingEntity
+import com.village.mod.world.Pond
+import com.village.mod.world.StructureType
+import com.village.mod.world.event.VillagerRequestCallback
 import net.minecraft.entity.ai.goal.Goal
-import net.minecraft.entity.ai.pathing.Path
-import net.minecraft.util.Hand
 import java.util.EnumSet
 
 class FishingGoal(private val entity: CustomVillagerEntity) : Goal() {
-    private var fishCountdown: Int = 0
-
+    private var lastUpdateTime: Long = 0
     init {
-        controls = EnumSet.of(Control.MOVE, Control.LOOK)
+        this.setControls(EnumSet.of(Goal.Control.MOVE, Goal.Control.LOOK))
     }
 
     override fun canStart(): Boolean {
-        if (entity.isState(State.CAST)) {
-            if (entity.peekTargetBlock() != null) {
-                return true
-            }
+        val currentTime = entity.world.time
+        if (currentTime - lastUpdateTime < 200L) {
+            return false
         }
-        return false
-    }
-
-    override fun shouldContinue(): Boolean {
-        fishCountdown++
-        if (fishCountdown > 100) {
+        if ((entity.getProfession() as Fisherman).getFishHook() != null) {
+            LOGGER.info("CANCELLED HERE!")
+            return false
+        }
+        lastUpdateTime = currentTime
+        if (entity.workStructure.second == null) {
+            VillagerRequestCallback.EVENT.invoker().interact(entity, StructureType.POND)
             return false
         }
         return true
     }
 
+    override fun shouldContinue(): Boolean {
+        return false
+    }
+
     override fun stop() {
-        (entity.getProfession() as Fisherman).TryCatch(entity)
-        entity.popTargetBlock()
-        entity.setState(State.IDLE)
-        fishCountdown = 0
     }
 
     override fun start() {
-        val fishHook = (entity.getProfession() as Fisherman).getFishHook()
-        if (fishHook == null) {
-            (entity.getProfession() as Fisherman).TryFish(entity)
-            (entity as LivingEntity).swingHand(Hand.MAIN_HAND)
-        }
+      entity.workStructure.second!!.interaction(entity)
     }
 }

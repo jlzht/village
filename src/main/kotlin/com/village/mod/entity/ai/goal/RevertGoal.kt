@@ -19,7 +19,7 @@ class SitGoal(private val entity: CustomVillagerEntity) : Goal() {
     }
 
     override fun canStart(): Boolean {
-        if (entity.isState(State.SIT)) {
+        if (entity.isState(State.SIT) || entity.isState(State.SLEEP)) {
             //sitPos = entity.getBlockPos()
             //if (entity.world.getBlockState(sitPos).isIn(BlockTags.SLABS)) {
                 //prevState = entity.getState()

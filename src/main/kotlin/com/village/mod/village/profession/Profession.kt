@@ -9,4 +9,5 @@ abstract class Profession() {
     abstract val type: ProfessionType
     init {}
     open fun addProfessionTasks(worker: CustomVillagerEntity) {}
+    open fun castAction(worker: CustomVillagerEntity) {}
 }

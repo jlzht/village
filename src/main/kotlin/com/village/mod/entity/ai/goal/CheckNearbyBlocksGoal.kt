@@ -65,21 +65,21 @@ class CheckNearbyBlocksGoal(private val entity: CustomVillagerEntity) : Goal() {
     }
 
     private fun isValidFishingWater(blockPos: BlockPos): Boolean {
-    //    if (world.getBlockState(blockPos).isOf(Blocks.WATER)) {
-    //        if (world.getBlockState(blockPos.up()).isOf(Blocks.AIR)) {
-    //            if (world.getBlockState(blockPos.north()).isOf(Blocks.WATER)
-    //                && world.getBlockState(blockPos.south()).isOf(Blocks.WATER)
-    //                && world.getBlockState(blockPos.west()).isOf(Blocks.WATER)
-    //                && world.getBlockState(blockPos.east()).isOf(Blocks.WATER)
-    //            ) {
-    //                if (world.getBlockState(blockPos.down()).isOf(Blocks.WATER)
-    //                ) {
-    //                    return true
-    //                }
-    //            }
-    //        }
-    //    }
-        return false
+    if (world.getBlockState(blockPos).isOf(Blocks.WATER)) {
+        if (world.getBlockState(blockPos.up()).isOf(Blocks.AIR)) {
+            if (world.getBlockState(blockPos.north()).isOf(Blocks.WATER)
+                && world.getBlockState(blockPos.south()).isOf(Blocks.WATER)
+                && world.getBlockState(blockPos.west()).isOf(Blocks.WATER)
+                && world.getBlockState(blockPos.east()).isOf(Blocks.WATER)
+            ) {
+                if (world.getBlockState(blockPos.down()).isOf(Blocks.WATER)
+                ) {
+                    return true
+                }
+            }
+        }
+    }
+    return false
     }
 
     private fun isValidFarmland(blockPos: BlockPos): Boolean {

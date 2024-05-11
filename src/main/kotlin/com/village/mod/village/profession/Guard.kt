@@ -5,6 +5,7 @@ import com.village.mod.entity.village.CustomVillagerEntity
 import net.minecraft.entity.LivingEntity
 import net.minecraft.entity.ai.goal.ActiveTargetGoal
 import net.minecraft.entity.mob.MobEntity
+import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.entity.mob.Monster
 import net.minecraft.entity.projectile.PersistentProjectileEntity
 import net.minecraft.entity.projectile.ProjectileEntity
@@ -13,14 +14,16 @@ import net.minecraft.item.ItemStack
 import net.minecraft.item.Items
 import net.minecraft.util.math.Vec3d
 import net.minecraft.world.World
+import net.minecraft.entity.projectile.ProjectileUtil
 import org.joml.Vector3f
 
 class Guard() : Profession() {
     override val type = ProfessionType.GUARD
     override fun addProfessionTasks(worker: CustomVillagerEntity) {
         // worker.appendGoal(3, MeleeAttackGoal(worker, 1.0, true))
-        worker.appendGoal(3, RangedAttackGoal(worker, 1.0, 8.0f))
-        worker.appendTargetGoal(1, ActiveTargetGoal((worker as MobEntity), MobEntity::class.java, 5, true, false, { entity -> entity is Monster }))
+        worker.appendGoal(3, RangedAttackGoal(worker, 1.0))
+        worker.appendTargetGoal(2, ActiveTargetGoal((worker as MobEntity), MobEntity::class.java, 5, true, false, { entity -> entity is Monster }))
+        worker.appendTargetGoal(1, ActiveTargetGoal<PlayerEntity>((worker as MobEntity), PlayerEntity::class.java, true));
     }
 
     fun shoot(
@@ -32,8 +35,12 @@ class Guard() : Profession() {
             return
         }
         val arrowItem: ArrowItem = Items.ARROW as ArrowItem
-        val projectileEntity: PersistentProjectileEntity = arrowItem.createArrow(world, ItemStack(Items.ARROW), entity)
-        //projectileEntity.setShotFromCrossbow(true)
+        var itemStack = entity.getProjectileType(entity.getStackInHand(ProjectileUtil.getHandPossiblyHolding(entity, if (entity.isHolding(Items.CROSSBOW)) {Items.CROSSBOW} else {Items.BOW} )))
+        val projectileEntity: PersistentProjectileEntity = arrowItem.createArrow(world, itemStack, entity)
+        if (entity.isHolding(Items.CROSSBOW)) {
+          projectileEntity.setShotFromCrossbow(true)
+        } else {
+        }
         this.shootTo(entity, target, projectileEntity, 1.0f, 1.6f)
         world.spawnEntity(projectileEntity)
     }

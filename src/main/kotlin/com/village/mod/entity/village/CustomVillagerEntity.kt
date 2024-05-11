@@ -1,10 +1,8 @@
 package com.village.mod.entity.village
 
+import com.village.mod.BlockAction
 import com.village.mod.LOGGER
-import com.village.mod.world.event.VillagerRequestCallback
-import com.village.mod.entity.ai.goal.SitGoal
 import com.village.mod.entity.ai.goal.GotoGoal
-import com.village.mod.entity.ai.goal.SleepGoal
 import com.village.mod.screen.TradingScreenHandler
 import com.village.mod.village.profession.Farmer
 import com.village.mod.village.profession.Fisherman
@@ -14,6 +12,10 @@ import com.village.mod.village.profession.Profession
 import com.village.mod.village.profession.ProfessionType
 import com.village.mod.village.profession.Unemployed
 import com.village.mod.village.villager.State
+import com.village.mod.world.Home
+import com.village.mod.world.Structure
+import com.village.mod.world.event.VillagerKilledCallback
+import com.village.mod.world.event.VillagerSpawnedCallback
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory
 import net.minecraft.entity.Entity
 import net.minecraft.entity.EntityData
@@ -36,8 +38,11 @@ import net.minecraft.entity.mob.PathAwareEntity
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.entity.player.PlayerInventory
 import net.minecraft.inventory.SimpleInventory
+import net.minecraft.item.Item
 import net.minecraft.item.ItemStack
 import net.minecraft.item.Items
+import net.minecraft.item.RangedWeaponItem
+import net.minecraft.item.SwordItem
 import net.minecraft.nbt.NbtCompound
 import net.minecraft.network.PacketByteBuf
 import net.minecraft.screen.ScreenHandler
@@ -50,14 +55,9 @@ import net.minecraft.world.LocalDifficulty
 import net.minecraft.world.ServerWorldAccess
 import net.minecraft.world.World
 import kotlin.random.Random
-import java.util.ArrayDeque
-import java.util.Deque
 
 public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, world: World?) :
-    PathAwareEntity(
-        entityType,
-        world,
-    ),
+    PathAwareEntity(entityType, world),
     ExtendedScreenHandlerFactory,
     InventoryOwner {
 
@@ -90,56 +90,58 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
     protected val SITTING_DIMENSIONS: EntityDimensions = EntityDimensions.fixed(0.6f, 1.35f)
     protected val STANDING_DIMENSIONS: EntityDimensions = EntityDimensions.fixed(0.6f, 1.95f)
 
+    private val ATTACK_RANGE: Double = 3.0
     private var profession: Profession = Unemployed()
-    public var  mark: Int = 0
-    public var identification: Int = 0
-    public var villageIdentification: Int = 0
+    public var mark: Int = 0
+    public var key: Int = 0
+    public var villageKey: Int = 0
+    public var homeStructure: Pair<Int, Structure?> = Pair(0, null)
+    public var workStructure: Pair<Int, Structure?> = Pair(0, null)
     private val inventory: SimpleInventory = SimpleInventory(18)
-    private var lockState: Boolean = false
-    public var zoneOfInterest: MutableList<BlockPos> = mutableListOf(BlockPos(0, 0, 0), BlockPos(0, 0, 0))
-    private var targetBlock: MutableList<BlockPos> = mutableListOf()
+    private var targetBlock: HashSet<BlockAction> = hashSetOf()
     public var emeraldShard: Int = 0
     public var experience: Int = 0
+    private var lockState: Boolean = false
+    init {
+        this.getNavigation().setCanSwim(false)
+    }
+
+    public fun assignStructure(key: Int, structure: Structure) {
+        if (structure is Home) {
+            this.homeStructure = Pair(key, structure)
+        } else {
+            this.workStructure = Pair(key, structure)
+        }
+    }
 
     override fun initialize(world: ServerWorldAccess, difficulty: LocalDifficulty, spawnReason: SpawnReason, entityData: EntityData?, entityNbt: NbtCompound?): EntityData? {
         if (spawnReason == SpawnReason.COMMAND || spawnReason == SpawnReason.SPAWN_EGG || SpawnReason.isAnySpawner(spawnReason) || spawnReason == SpawnReason.DISPENSER) {
         }
         setProfession(Random.nextInt(5))
-        val chance = Random.nextInt(1) * 3
-        VillagerRequestCallback.EVENT.invoker().interact(this, chance)
-
+        VillagerSpawnedCallback.EVENT.invoker().interact(this)
         return super.initialize(world, difficulty, spawnReason, entityData, entityNbt)
     }
 
-    // Targeting
-
-    public fun pushTargetBlock(blockPos: BlockPos) {
-        if (!targetBlock.contains(blockPos)) {
-          LOGGER.info("adding new blocks!")
-          this.targetBlock.add(blockPos)
-        }
+    public fun addTargetBlock(action: BlockAction) {
+        LOGGER.info("VILLAGER({}): ADDING ACTION FOR BLOCK: {} AT: {}", this.key, action.block, action.pos)
+        this.targetBlock.add(action)
     }
 
-    public fun peekTargetBlock(): BlockPos {
+    public fun delTargetBlock(action: BlockAction) {
+        this.targetBlock.remove(action)
+    }
+    public fun getTargetBlock(): BlockAction {
         return this.targetBlock.first()
     }
-
-    public fun popTargetBlock(): BlockPos {
-        return this.targetBlock.removeFirst()
-    }
     public fun isTargetBlockEmpty(): Boolean {
-      return this.targetBlock.isEmpty()
-    }
-    public fun sortTargetBlock() {
-      this.targetBlock = targetBlock.sorted().distinct().toMutableList()
+        return this.targetBlock.isEmpty()
     }
 
     public override fun canGather(stack: ItemStack): Boolean {
         return this.inventory.canInsert(stack)
     }
-    override  fun remove(reason: RemovalReason) {
-      super.remove(reason)
-      LOGGER.info("I GOT REMOVED!")
+    override fun remove(reason: RemovalReason) {
+        super.remove(reason)
     }
 
     public fun setVillagerData(villagerData: Int) {
@@ -156,7 +158,7 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
 
     public fun setState(state: State) {
         if (this.getState() != state) {
-          dataTracker.set(STATE, state.ordinal)
+            dataTracker.set(STATE, state.ordinal)
         }
     }
 
@@ -190,29 +192,6 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         super.tickMovement()
     }
 
-    public fun tryAppendToZOI(blockPos: BlockPos) {
-        if (zoneOfInterest[0].equals(zoneOfInterest[1])) {
-            zoneOfInterest[1] = blockPos
-            return
-        }
-        if (zoneOfInterest[0].x == 0 && zoneOfInterest[0].z == 0) {
-            zoneOfInterest[0] = zoneOfInterest[1]
-        }
-        if (blockPos.x > zoneOfInterest[1].x) {
-            zoneOfInterest[1] = zoneOfInterest[1].add(blockPos.x - zoneOfInterest[1].x, 0, 0)
-        }
-        if (blockPos.z < zoneOfInterest[1].z) {
-            zoneOfInterest[1] = zoneOfInterest[1].add(0, 0, blockPos.z - zoneOfInterest[1].z)
-        }
-        if (blockPos.x < zoneOfInterest[0].x) {
-            zoneOfInterest[0] = zoneOfInterest[0].add(blockPos.x - zoneOfInterest[0].x, 0, 0)
-        }
-        if (blockPos.z > zoneOfInterest[0].z) {
-            zoneOfInterest[0] = zoneOfInterest[0].add(0, 0, blockPos.z - zoneOfInterest[0].z)
-        }
-        LOGGER.info("I GOT IN - {} --- {} -", zoneOfInterest[0], zoneOfInterest[1])
-    }
-
     fun setCharging(charging: Boolean) {
         dataTracker.set(CHARGING, charging)
     }
@@ -238,11 +217,15 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         this.setVillagerData(n)
         LOGGER.info("{} - {}", professionNumber, this.getVillagerData())
         val stackInHand = this.getStackInHand(Hand.MAIN_HAND)
-        //if (stackInHand.isEmpty && professionNumber == ProfessionType.FISHERMAN) {
-        //    this.equipStack(EquipmentSlot.MAINHAND, ItemStack(Items.FISHING_ROD))
-        //}
+        if (stackInHand.isEmpty && professionNumber == ProfessionType.FISHERMAN) {
+            this.equipStack(EquipmentSlot.MAINHAND, ItemStack(Items.FISHING_ROD))
+        }
         if (stackInHand.isEmpty && professionNumber == ProfessionType.GUARD) {
-            this.equipStack(EquipmentSlot.MAINHAND, ItemStack(Items.BOW))
+            this.getInventory().setStack(0, ItemStack(Items.WOODEN_SWORD))
+            when (Random.nextInt(2)) {
+                0 -> this.getInventory().setStack(1, ItemStack(Items.BOW))
+                1 -> this.getInventory().setStack(1, ItemStack(Items.CROSSBOW))
+            }
         }
         if (stackInHand.isEmpty && professionNumber == ProfessionType.FARMER) {
             this.equipStack(EquipmentSlot.MAINHAND, ItemStack(Items.WOODEN_HOE))
@@ -260,13 +243,7 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
     }
 
     override fun initGoals() {
-        // goalSelector.add(0, SwimGoal(this))
-        // goalSelector.add(3, SleepGoal(this))
-        // ADD IDLE TASK TO MAKE ENTITY MORE VIVID
-        //goalSelector.add(4, SitGoal(this)) // MUST NOT BE A TASK
         goalSelector.add(2, GotoGoal(this))
-        // goalSelector.add(4, WanderAroundGoal(this, 1.0))
-        // goalSelector.add(5, LookAtEntityGoal(this, CustomVillagerEntity::class.java, 6.0f))
     }
 
     override fun initDataTracker() {
@@ -293,7 +270,7 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
             if (!world.isClient) {
                 if (this.profession is Merchant) {
                     val optionalInt = player.openHandledScreen(this)
-                    //TODO: If recieved optionalInt int do calculations for trading
+                    // TODO: If recieved optionalInt int do calculations for trading
                 }
             }
             return ActionResult.success(this.getWorld().isClient)
@@ -305,10 +282,7 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         super.tick()
     }
 
-    fun dropInventoryItems(
-        world: World,
-        pos: BlockPos,
-    ) {
+    fun dropInventoryItems(world: World, pos: BlockPos) {
         ItemScatterer.spawn(world, pos, this.getInventory())
     }
 
@@ -320,7 +294,7 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         LOGGER.info("Villager {} died, message: {}", this as Any, damageSource.getDeathMessage(this).string)
         // var entity: Entity? = damageSource.getAttacker()
         dropInventoryItems(world, this.getBlockPos())
-        VillagerRequestCallback.EVENT.invoker().interact(this, 1)
+        VillagerKilledCallback.EVENT.invoker().interact(this)
         super.onDeath(damageSource)
     }
 
@@ -336,60 +310,62 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         InventoryOwner.pickUpItem(this, this, item)
     }
 
-    fun encodeNbtData(mark: Int, experience: Int, shards: Int, profession: Int, states: Int): Int {
+    fun encodeVillagerData(mark: Int, experience: Int, shards: Int, profession: Int, states: Int): Int {
         return (mark) or (experience shl 2) or ((shards shl 12)) or ((profession shl 22)) or ((states shl 28))
     }
 
     fun decodeNbtData(villagerStat: Int): IntArray {
-        return intArrayOf(mark and 3,villagerStat shr 2 and 1023, villagerStat shr 12 and 1023, villagerStat shr 22 and 31, villagerStat ushr 28 and 15)
+        return intArrayOf(mark and 3, villagerStat shr 2 and 1023, villagerStat shr 12 and 1023, villagerStat shr 22 and 31, villagerStat ushr 28 and 15)
+    }
+
+    val swordPredicate: (Item) -> Boolean = { item -> item is SwordItem }
+    val rangedPredicate: (Item) -> Boolean = { item -> item is RangedWeaponItem }
+
+    fun takeItem(predicate: (Item) -> Boolean): ItemStack {
+        for (i in 0 until inventory.size()) {
+            val stack = inventory.getStack(i)
+            if (predicate(stack.item)) {
+                inventory.removeStack(i)
+                return stack
+            }
+        }
+        return ItemStack.EMPTY
     }
 
     override fun readCustomDataFromNbt(nbt: NbtCompound) {
         super.readCustomDataFromNbt(nbt)
-        if (nbt.contains("villagerStat")) {
-            val arr = decodeNbtData(nbt.getInt("villagerStat"))
-            LOGGER.info("READ NBT: {}, {}, {}, {}, {}", arr[0], arr[1], arr[2], arr[3], arr[4])
+        if (nbt.contains("VillagerDataZ")) {
+            val arr = decodeNbtData(nbt.getInt("VillagerDataZ"))
+            LOGGER.info("READING -> {}, EXP:{}, EMERALD:{}, PROFESION:{}, STATE:{}", arr[0], arr[1], arr[2], State.values()[arr[3]], arr[4])
             this.mark = arr[0]
             this.experience = arr[1]
             this.emeraldShard = arr[2]
             setProfession(arr[3])
             setState(State.values()[arr[4]])
         }
-        // this.setState(State.values()[nbt.getInt("statew")])
-        this.identification = nbt.getInt("iden")
-        this.villageIdentification = nbt.getInt("villageIden")
-        //if (nbt.contains("posX")) {
-        //  if (this.getTargetBlock() == null) {
-        //    this.setTargetBlock(BlockPos(
-        //        nbt.getInt("posX"),
-        //        nbt.getInt("posY"),
-        //        nbt.getInt("posZ")
-        //    ))
-        //}
-        //}
+        this.key = nbt.getInt("Key")
+        this.villageKey = nbt.getInt("VillageKey")
+        LOGGER.info("HOME: {}, WORK: {}", this.homeStructure.first, this.workStructure.first)
+        this.workStructure = Pair(nbt.getInt("WorkStructureKey"), null)
+        this.homeStructure = Pair(nbt.getInt("HomeStructureKey"), null)
     }
 
     override fun writeCustomDataToNbt(nbt: NbtCompound) {
         super.writeCustomDataToNbt(nbt)
-        LOGGER.info("ID {} WRITING TO NBT: {}, {}, {}, {}, {}", this.identification, this.mark, this.experience, this.emeraldShard, this.getProfession().type.ordinal, this.getState().ordinal)
+        LOGGER.info("WRITING -> ID: {}, {} EXP: {}, EMERALD: {}, PROFESSION: {}, STATE: {}| HOME: {}, WORK:{}", this.key, this.mark, this.experience, this.emeraldShard, this.getProfession().type, this.getState(),this.homeStructure.first, this.workStructure.first)
         nbt.putInt(
-            "villagerStat",
-            encodeNbtData(
+            "VillagerDataZ",
+            encodeVillagerData(
                 this.mark,
                 this.experience,
                 this.emeraldShard,
                 this.getProfession().type.ordinal,
-                this.getState().ordinal
+                this.getState().ordinal,
             ),
         )
-        // nbt.putInt("statew", this.getState().ordinal)
-        //val tpos = this.getTargetBlock()
-        //if (tpos != null) {
-        //    nbt.putInt("posX", tpos.x)
-        //    nbt.putInt("posY", tpos.y)
-        //    nbt.putInt("posZ", tpos.z)
-        //}
-        nbt.putInt("iden", this.identification)
-        nbt.putInt("villageIden", this.villageIdentification)
+        nbt.putInt("Key", this.key)
+        nbt.putInt("VillageKey", this.villageKey)
+        nbt.putInt("WorkStructureKey", this.workStructure.first)
+        nbt.putInt("HomeStructureKey", this.homeStructure.first)
     }
 }

@@ -1,6 +1,7 @@
 package com.village.mod.world.event
 
 import net.fabricmc.fabric.api.event.EventFactory
+import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.ActionResult
 import net.minecraft.world.World
@@ -11,9 +12,9 @@ fun interface HandBellUsageCallback {
         val EVENT = EventFactory.createArrayBacked(
             HandBellUsageCallback::class.java,
         ) { listeners ->
-            HandBellUsageCallback { pos, world ->
+            HandBellUsageCallback { player, pos, world ->
                 for (listener in listeners) {
-                    val result = listener.interact(pos, world)
+                    val result = listener.interact(player, pos, world)
                     if (result != ActionResult.PASS) {
                         return@HandBellUsageCallback result
                     }
@@ -22,5 +23,5 @@ fun interface HandBellUsageCallback {
             }
         }
     }
-    fun interact(entity: BlockPos, world: World): ActionResult
+    fun interact(entity: PlayerEntity,pos: BlockPos, world: World): ActionResult
 }

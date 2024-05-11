@@ -1,5 +1,13 @@
 {
   "item.village.emerald_token": "Emerald Token",
   "item.village.emerald_bundle": "Emerald Bundle",
-  "item.village.hand_bell": "Hand Bell"
+  "item.village.hand_bell": "Hand Bell",
+  "item.village.hand_bell.farm.added": "A farm was added",
+  "item.village.hand_bell.farm.occupied": "There is a farm here already",
+  "item.village.hand_bell.pond.added": "A pond was added",
+  "item.village.hand_bell.pond.occupied": "There is a pond here already",
+  "block.village.bell.interaction.full": "This is already a village",
+  "block.village.bell.interaction.same": "Another village has this name",
+  "block.village.bell.interaction.near": "There is another village nearby",
+  "block.village.bell.interaction.new": "Created a a new village named:"
 }

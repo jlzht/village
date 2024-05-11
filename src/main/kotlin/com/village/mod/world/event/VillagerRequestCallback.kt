@@ -3,6 +3,8 @@ package com.village.mod.world.event
 import net.fabricmc.fabric.api.event.EventFactory
 import com.village.mod.entity.village.CustomVillagerEntity
 import net.minecraft.util.ActionResult
+import com.village.mod.world.Structure
+import com.village.mod.world.StructureType
 
 fun interface VillagerRequestCallback {
     companion object {
@@ -10,9 +12,9 @@ fun interface VillagerRequestCallback {
         val EVENT = EventFactory.createArrayBacked(
             VillagerRequestCallback::class.java,
         ) { listeners ->
-            VillagerRequestCallback { entity, villageID ->
+            VillagerRequestCallback { entity, type ->
                 for (listener in listeners) {
-                    val result = listener.interact(entity, villageID)
+                    val result = listener.interact(entity, type)
                     if (result != ActionResult.PASS) {
                         return@VillagerRequestCallback result
                     }
@@ -22,5 +24,5 @@ fun interface VillagerRequestCallback {
         }
     }
 
-    fun interact(entity: CustomVillagerEntity, villageID: Int): ActionResult
+    fun interact(entity: CustomVillagerEntity, type: StructureType): ActionResult
 }

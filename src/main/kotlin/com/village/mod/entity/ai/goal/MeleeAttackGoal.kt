@@ -26,14 +26,12 @@ class MeleeAttackGoal(entity: CustomVillagerEntity, private val speed: Double, p
     }
 
     override fun canStart(): Boolean {
-        LOGGER.info("xRv")
         val currentTime = mob.world.time
         if (currentTime - lastUpdateTime < 40L) {
             return false
         }
         lastUpdateTime = currentTime
         val livingEntity = mob.target
-        LOGGER.info("xRx")
         if (livingEntity == null || !livingEntity.isAlive) {
             return false
         }

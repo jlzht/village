@@ -7,26 +7,26 @@ import com.village.mod.entity.ai.goal.FishingGoal
 class Fisherman : Profession() {
     override val type = ProfessionType.FISHERMAN
     private var fishHook: SimpleFishingBobberEntity? = null
-    
+
     public fun getFishHook(): SimpleFishingBobberEntity? {
-      return this.fishHook
+        return this.fishHook
     }
-    
+
     public fun setFishHook(fishHook: SimpleFishingBobberEntity?) {
-      this.fishHook = fishHook
+        this.fishHook = fishHook
     }
-    public fun TryFish(worker: CustomVillagerEntity) {
+    override fun castAction(worker: CustomVillagerEntity) {
         if (this.fishHook == null) {
             worker.world.spawnEntity(SimpleFishingBobberEntity(worker, worker.world, 0, 0))
         }
     }
     public fun TryCatch(worker: CustomVillagerEntity) {
-      if (this.fishHook != null) {
-        (worker.getProfession() as Fisherman).fishHook?.pullBack()
-      }
+        if (this.fishHook != null) {
+            (worker.getProfession() as Fisherman).fishHook?.pullBack()
+        }
     }
 
     override fun addProfessionTasks(worker: CustomVillagerEntity) {
-        //worker.appendGoal(3, FishingGoal(worker))
+        worker.appendGoal(3, FishingGoal(worker))
     }
 }

@@ -30,12 +30,12 @@ import kotlin.math.abs
 
 class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>, world: World, luckOfTheSeaLevel: Int, lureLevel: Int) : ProjectileEntity(type, world) {
     private val velocityRandom: Random = Random.create()
-    private var state: State = State.FLYING
+    private var state: BobberState = BobberState.FLYING
     private var luckOfTheSeaLevel: Int = 0
     private var lureLevel: Int = 0
     private var removalTimer: Int = 0
     private var hookCountdown: Int = 0
-    private var waitCountdown: Int = 0
+    private var fishingTicks: Int = 0
 
     init {
         this.luckOfTheSeaLevel = maxOf(0, luckOfTheSeaLevel)
@@ -44,12 +44,13 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     }
 
     constructor(thrower: CustomVillagerEntity, world: World, luckOfTheSeaLevel: Int, lureLevel: Int) : this(Village.SIMPLE_FISHING_BOBBER, world, luckOfTheSeaLevel, lureLevel) {
+        // TODO: ADD RIVER SIZE AND TARGET BLOCK
         val entity = thrower
         this.setOwner(entity)
-        val f: Float = entity.pitch
-        val g: Float = entity.yaw
-        val h: Float = MathHelper.sin(-g * (Math.PI.toFloat() / 180) - Math.PI.toFloat())
-        val i: Float = MathHelper.cos(-g * (Math.PI.toFloat() / 180) - Math.PI.toFloat())
+        val f: Float = entity.getPitch()
+        val g: Float = entity.headYaw
+        val h: Float = MathHelper.cos(-g * (Math.PI.toFloat() / 180) - Math.PI.toFloat())
+        val i: Float = MathHelper.sin(-g * (Math.PI.toFloat() / 180) - Math.PI.toFloat())
         val j: Float = -MathHelper.cos(-f * (Math.PI.toFloat() / 180))
         val k: Float = MathHelper.sin(-f * (Math.PI.toFloat() / 180))
         val d: Double = entity.x - i * 0.3
@@ -58,7 +59,9 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         this.refreshPositionAndAngles(d, e, l, g, f)
         var vec3d: Vec3d = Vec3d(-i.toDouble(), MathHelper.clamp(-(k / j).toDouble(), -5.0, 5.0), -h.toDouble())
         var m: Double = vec3d.length()
-        vec3d = vec3d.multiply(0.6 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365), 0.6 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365), 0.6 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365))
+        vec3d = vec3d.multiply(0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365),
+                               0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365),
+                               0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365))
         this.velocity = vec3d
     }
 
@@ -87,14 +90,21 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
 
     override fun tick() {
         super.tick()
-        if (this.getOwner() == null) {
+        if (fishingTicks >= 300) {
+            this.pullBack()
+            return
+        }
+        val owner = this.getOwner()
+        if (owner == null) {
             LOGGER.info("TRIGGER REMOVAL")
             this.remove(RemovalReason.DISCARDED)
             return
+        } else {
+            (owner as CustomVillagerEntity).lookControl.lookAt(this.x, this.y, this.z, 30.0f, 30.0f)
         }
         if (isOnGround) {
             removalTimer++
-            if (removalTimer >= 700) {
+            if (removalTimer >= 50) {
                 LOGGER.info("TRIGGER REMOVAL TIMEOUT")
                 remove(RemovalReason.DISCARDED)
                 return
@@ -109,20 +119,21 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
             f = fluidState.getHeight(world, blockPos)
         }
         val bl: Boolean = f > 0.0f
-        if (state == State.FLYING) {
+        if (state == BobberState.FLYING) {
             if (bl) {
                 velocity = velocity.multiply(0.15, 0.2, 0.15)
-                state = State.BOBBING
+                state = BobberState.BOBBING
                 return
             }
             checkForCollision()
         } else {
-            if (state == State.BOBBING) {
+            if (state == BobberState.BOBBING) {
                 val vec3d: Vec3d = velocity
                 var d: Double = y + vec3d.y - blockPos.y.toDouble() - f
                 if (abs(d) < 0.01) {
                     d += Math.signum(d) * 0.1
                 }
+                fishingTicks++ // be random val
                 velocity = Vec3d(vec3d.x * 0.9, vec3d.y - d * random.nextFloat() * 0.2, vec3d.z * 0.9)
             }
         }
@@ -130,7 +141,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
             velocity = velocity.add(0.0, -0.03, 0.0)
         }
         move(MovementType.SELF, velocity)
-        if (state == State.FLYING && (isOnGround || horizontalCollision)) {
+        if (state == BobberState.FLYING && (isOnGround || horizontalCollision)) {
             velocity = Vec3d.ZERO
         }
         velocity = velocity.multiply(0.92)
@@ -154,36 +165,37 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     override fun onBlockHit(blockHitResult: BlockHitResult) {
         super.onBlockHit(blockHitResult)
         velocity = velocity.normalize().multiply(blockHitResult.squaredDistanceTo(this))
+        LOGGER.info("I HIT WATER")
     }
 
-    private fun isOpenOrWaterAround(pos: BlockPos): Boolean {
-        var positionType: PositionType = PositionType.INVALID
-        for (i in -1..2) {
-            val positionType2: PositionType = getPositionType(pos.add(-2, i, -2), pos.add(2, i, 2))
-            when (positionType2) {
-                PositionType.INVALID -> return false
-                PositionType.ABOVE_WATER -> if (positionType == PositionType.INVALID) return false
-                PositionType.INSIDE_WATER -> if (positionType == PositionType.ABOVE_WATER) return false
-            }
-            positionType = positionType2
-        }
-        return true
-    }
+    //private fun isOpenOrWaterAround(pos: BlockPos): Boolean {
+    //    var positionType: PositionType = PositionType.INVALID
+    //    for (i in -1..2) {
+    //        val positionType2: PositionType = getPositionType(pos.add(-2, i, -2), pos.add(2, i, 2))
+    //        when (positionType2) {
+    //            PositionType.INVALID -> return false
+    //            PositionType.ABOVE_WATER -> if (positionType == PositionType.INVALID) return false
+    //            PositionType.INSIDE_WATER -> if (positionType == PositionType.ABOVE_WATER) return false
+    //        }
+    //        positionType = positionType2
+    //    }
+    //    return true
+    //}
 
-    private fun getPositionType(start: BlockPos, end: BlockPos): PositionType {
-        return BlockPos.stream(start, end).map(::getPositionType).reduce { positionType, positionType2 -> if (positionType == positionType2) positionType else PositionType.INVALID }.orElse(PositionType.INVALID)
-    }
+    //private fun getPositionType(start: BlockPos, end: BlockPos): PositionType {
+    //    return BlockPos.stream(start, end).map(::getPositionType).reduce { positionType, positionType2 -> if (positionType == positionType2) positionType else PositionType.INVALID }.orElse(PositionType.INVALID)
+    //}
 
-    private fun getPositionType(pos: BlockPos): PositionType {
-        val blockState: BlockState = world.getBlockState(pos)
-        return when {
-            blockState.isAir || blockState.isOf(Blocks.LILY_PAD) -> PositionType.ABOVE_WATER
-            else -> {
-                val fluidState: FluidState = blockState.fluidState
-                if (fluidState.isIn(FluidTags.WATER) && fluidState.isStill && blockState.getCollisionShape(world, pos).isEmpty) PositionType.INSIDE_WATER else PositionType.INVALID
-            }
-        }
-    }
+    //private fun getPositionType(pos: BlockPos): PositionType {
+    //    val blockState: BlockState = world.getBlockState(pos)
+    //    return when {
+    //        blockState.isAir || blockState.isOf(Blocks.LILY_PAD) -> PositionType.ABOVE_WATER
+    //        else -> {
+    //            val fluidState: FluidState = blockState.fluidState
+    //            if (fluidState.isIn(FluidTags.WATER) && fluidState.isStill && blockState.getCollisionShape(world, pos).isEmpty) PositionType.INSIDE_WATER else PositionType.INVALID
+    //        }
+    //    }
+    //}
 
     override fun writeCustomDataToNbt(nbt: NbtCompound) {}
 
@@ -243,7 +255,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         }
     }
 
-    enum class State {
+    enum class BobberState {
         FLYING,
         BOBBING,
     }
