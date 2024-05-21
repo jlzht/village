@@ -4,8 +4,6 @@ import com.village.mod.LOGGER
 import com.village.mod.Village
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.village.profession.Fisherman
-import net.minecraft.block.BlockState
-import net.minecraft.block.Blocks
 import net.minecraft.entity.Entity
 import net.minecraft.entity.EntityType
 import net.minecraft.entity.MovementType
@@ -26,7 +24,6 @@ import net.minecraft.util.math.MathHelper
 import net.minecraft.util.math.Vec3d
 import net.minecraft.util.math.random.Random
 import net.minecraft.world.World
-import kotlin.math.abs
 
 class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>, world: World, luckOfTheSeaLevel: Int, lureLevel: Int) : ProjectileEntity(type, world) {
     private val velocityRandom: Random = Random.create()
@@ -47,6 +44,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         // TODO: ADD RIVER SIZE AND TARGET BLOCK
         val entity = thrower
         this.setOwner(entity)
+        this.setRodOwner(this)
         val f: Float = entity.getPitch()
         val g: Float = entity.headYaw
         val h: Float = MathHelper.cos(-g * (Math.PI.toFloat() / 180) - Math.PI.toFloat())
@@ -59,19 +57,20 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         this.refreshPositionAndAngles(d, e, l, g, f)
         var vec3d: Vec3d = Vec3d(-i.toDouble(), MathHelper.clamp(-(k / j).toDouble(), -5.0, 5.0), -h.toDouble())
         var m: Double = vec3d.length()
-        vec3d = vec3d.multiply(0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365),
-                               0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365),
-                               0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365))
+        vec3d = vec3d.multiply(
+            0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365),
+            0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365),
+            0.5 / m + this.velocityRandom.nextTriangular(0.5, 0.0103365),
+        )
         this.velocity = vec3d
     }
 
     override fun setOwner(entity: Entity?) {
         super.setOwner(entity)
-        this.setRodOwner(this)
     }
     private fun setRodOwner(rod: SimpleFishingBobberEntity?) {
         val entity: CustomVillagerEntity? = (this.getOwner() as CustomVillagerEntity)
-        if (entity != null && entity.getProfession() is Fisherman) {
+        if (entity != null && entity.getProfession() != null) {
             (entity.getProfession() as Fisherman).setFishHook(rod)
         }
     }
@@ -129,8 +128,8 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         } else {
             if (state == BobberState.BOBBING) {
                 val vec3d: Vec3d = velocity
-                var d: Double = y + vec3d.y - blockPos.y.toDouble() - f
-                if (abs(d) < 0.01) {
+                var d: Double = y + vec3d.y - blockPos.y - f
+                if (MathHelper.abs(d.toFloat()) < 0.01) {
                     d += Math.signum(d) * 0.1
                 }
                 fishingTicks++ // be random val
@@ -155,11 +154,11 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
 
     override fun canHit(entity: Entity?): Boolean {
         return false
-        //super.canHit(entity)
+        // super.canHit(entity)
     }
 
     override fun onEntityHit(entityHitResult: EntityHitResult) {
-      //super.onEntityHit(entityHitResult)
+        // super.onEntityHit(entityHitResult)
     }
 
     override fun onBlockHit(blockHitResult: BlockHitResult) {
@@ -168,7 +167,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         LOGGER.info("I HIT WATER")
     }
 
-    //private fun isOpenOrWaterAround(pos: BlockPos): Boolean {
+    // private fun isOpenOrWaterAround(pos: BlockPos): Boolean {
     //    var positionType: PositionType = PositionType.INVALID
     //    for (i in -1..2) {
     //        val positionType2: PositionType = getPositionType(pos.add(-2, i, -2), pos.add(2, i, 2))
@@ -180,13 +179,13 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     //        positionType = positionType2
     //    }
     //    return true
-    //}
+    // }
 
-    //private fun getPositionType(start: BlockPos, end: BlockPos): PositionType {
+    // private fun getPositionType(start: BlockPos, end: BlockPos): PositionType {
     //    return BlockPos.stream(start, end).map(::getPositionType).reduce { positionType, positionType2 -> if (positionType == positionType2) positionType else PositionType.INVALID }.orElse(PositionType.INVALID)
-    //}
+    // }
 
-    //private fun getPositionType(pos: BlockPos): PositionType {
+    // private fun getPositionType(pos: BlockPos): PositionType {
     //    val blockState: BlockState = world.getBlockState(pos)
     //    return when {
     //        blockState.isAir || blockState.isOf(Blocks.LILY_PAD) -> PositionType.ABOVE_WATER
@@ -195,7 +194,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     //            if (fluidState.isIn(FluidTags.WATER) && fluidState.isStill && blockState.getCollisionShape(world, pos).isEmpty) PositionType.INSIDE_WATER else PositionType.INVALID
     //        }
     //    }
-    //}
+    // }
 
     override fun writeCustomDataToNbt(nbt: NbtCompound) {}
 
@@ -226,7 +225,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         if (ent != null) {
             this.setRodOwner(null)
         }
-       //setState(State.WORK)
+        // setState(State.WORK)
         super.remove(reason)
     }
 
@@ -249,8 +248,6 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     override fun onSpawnPacket(packet: EntitySpawnS2CPacket) {
         super.onSpawnPacket(packet)
         if (this.getOwner() == null) {
-            //val i: Int = packet.entityData
-            // LOGGER.error("Failed to recreate fishing hook on client. {} (id: {}) is not a valid ownn.", world.getEntityById(i), i)
             kill()
         }
     }

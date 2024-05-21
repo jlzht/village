@@ -1,6 +1,6 @@
 package com.village.mod.village.profession
 
-import com.village.mod.entity.ai.goal.RangedAttackGoal
+import com.village.mod.entity.ai.goal.AttackGoal
 import com.village.mod.entity.village.CustomVillagerEntity
 import net.minecraft.entity.LivingEntity
 import net.minecraft.entity.ai.goal.ActiveTargetGoal
@@ -15,15 +15,16 @@ import net.minecraft.item.Items
 import net.minecraft.util.math.Vec3d
 import net.minecraft.world.World
 import net.minecraft.entity.projectile.ProjectileUtil
+import com.village.mod.village.structure.StructureType
 import org.joml.Vector3f
 
 class Guard() : Profession() {
     override val type = ProfessionType.GUARD
     override fun addProfessionTasks(worker: CustomVillagerEntity) {
         // worker.appendGoal(3, MeleeAttackGoal(worker, 1.0, true))
-        worker.appendGoal(3, RangedAttackGoal(worker, 1.0))
-        worker.appendTargetGoal(2, ActiveTargetGoal((worker as MobEntity), MobEntity::class.java, 5, true, false, { entity -> entity is Monster }))
-        worker.appendTargetGoal(1, ActiveTargetGoal<PlayerEntity>((worker as MobEntity), PlayerEntity::class.java, true));
+        worker.appendGoal(4, AttackGoal(worker, 1.0))
+        //worker.appendTargetGoal(2, ActiveTargetGoal((worker as MobEntity), MobEntity::class.java, 5, true, false, { entity -> entity is Monster }))
+        //worker.appendTargetGoal(1, ActiveTargetGoal<PlayerEntity>((worker as MobEntity), PlayerEntity::class.java, true));
     }
 
     fun shoot(
@@ -66,4 +67,5 @@ class Guard() : Profession() {
         val vector3f3 = vector3f.rotateAxis(0.0f, vector3f2.x, vector3f2.y, vector3f2.z)
         return vector3f.rotateAxis((Math.PI.toFloat() / 180), vector3f3.x, vector3f3.y, vector3f3.z)
     }
+    override val structureInterest: StructureType = StructureType.NONE
 }

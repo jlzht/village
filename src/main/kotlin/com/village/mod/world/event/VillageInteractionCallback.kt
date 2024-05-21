@@ -11,9 +11,9 @@ fun interface VillageInteractionCallback {
         val EVENT = EventFactory.createArrayBacked(
             VillageInteractionCallback::class.java,
         ) { listeners ->
-            VillageInteractionCallback { entity, block ->
+            VillageInteractionCallback { entity, block, name ->
                 for (listener in listeners) {
-                    val result = listener.interact(entity, block)
+                    val result = listener.interact(entity, block, name)
                     if (result != ActionResult.PASS) {
                         return@VillageInteractionCallback result
                     }
@@ -23,5 +23,5 @@ fun interface VillageInteractionCallback {
         }
     }
 
-    fun interact(entity: PlayerEntity, block: BlockPos): ActionResult
+    fun interact(entity: PlayerEntity, block: BlockPos, name: String): ActionResult
 }

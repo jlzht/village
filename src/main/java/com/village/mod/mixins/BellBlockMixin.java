@@ -9,6 +9,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import com.village.mod.world.event.VillageInteractionCallback;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.world.World;
 import net.minecraft.block.BlockState;
 import net.minecraft.util.hit.BlockHitResult;
@@ -26,10 +28,13 @@ public abstract class BellBlockMixin {
   @Inject(method = "ring", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/PlayerEntity;incrementStat(Lnet/minecraft/util/Identifier;)V", shift = At.Shift.AFTER), cancellable = true) 
   public void ring(World world, BlockState state, BlockHitResult hitResult, @Nullable PlayerEntity player, boolean checkHitPos, CallbackInfoReturnable<Boolean> cir) {
       if (player != null) {  
-        ActionResult result = VillageInteractionCallback.EVENT.invoker().interact(player, hitResult.getBlockPos() );
-        if(result == ActionResult.FAIL) {
-            cir.cancel();
-        }  
+          ItemStack itemStack = player.getMainHandStack();
+          if (itemStack.isOf(Items.NAME_TAG) && itemStack.hasCustomName()) {
+              ActionResult result = VillageInteractionCallback.EVENT.invoker().interact(player, hitResult.getBlockPos(), itemStack.getName().getString());
+              if(result == ActionResult.FAIL) {
+                  cir.cancel();
+              }
+          }
       }
   }
 }

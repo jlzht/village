@@ -1,7 +1,6 @@
 package com.village.mod.client.render.entity.model
 
 import com.village.mod.MODID
-import com.village.mod.LOGGER
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.village.villager.State
 import net.fabricmc.api.EnvType
@@ -27,7 +26,7 @@ import net.minecraft.util.Identifier
 import net.minecraft.util.math.MathHelper
 
 @Environment(EnvType.CLIENT)
-class CustomVillagerEntityModel(private val root: ModelPart) : SinglePartEntityModel<CustomVillagerEntity>(), ModelWithHead,ModelWithArms {
+class CustomVillagerEntityModel(private val root: ModelPart) : SinglePartEntityModel<CustomVillagerEntity>(), ModelWithHead, ModelWithArms {
     private var offsets = false
     private val head: ModelPart = root.getChild(EntityModelPartNames.HEAD)
     private val body: ModelPart = root.getChild(EntityModelPartNames.BODY)
@@ -121,7 +120,7 @@ class CustomVillagerEntityModel(private val root: ModelPart) : SinglePartEntityM
         this.rightArm.pivotX = -5.0f
         this.leftArm.pivotZ = 0.0f
         this.leftArm.pivotX = 5.0f
-        if ((entity).isState(State.SIT)) {
+        if (entity.state.isAt(State.SIT)) {
             rightArm.pitch = -0.62831855f
             rightArm.yaw = 0.0f
             rightArm.roll = 0.0f
@@ -150,32 +149,33 @@ class CustomVillagerEntityModel(private val root: ModelPart) : SinglePartEntityM
             leftLeg.roll = 0.0f
             this.offsets = false
         }
-        if (entity.isState(State.ATTACK)) {
-            if (entity.isHolding(Items.CROSSBOW)) {
-                if (entity.isCharging()) {
-                    CrossbowPosing.charge(rightArm, leftArm, entity, true)
-                } else {
-                    CrossbowPosing.hold(rightArm, leftArm, head, true)
-                }
+        // if (entity.state.isAt(State.ATTACK)) {
+        if (entity.isHolding(Items.CROSSBOW)) {
+            if (entity.isCharging()) {
+                CrossbowPosing.charge(rightArm, leftArm, entity, true)
+            } else {
+                CrossbowPosing.hold(rightArm, leftArm, head, true)
             }
-            if (entity.isHolding(Items.BOW)) {
-                this.rightArm.yaw = -0.1f + this.head.yaw
-                this.leftArm.yaw = 0.1f + this.head.yaw + 0.4f
-                this.rightArm.pitch = -1.5707964f + this.head.pitch
-                this.leftArm.pitch = -1.5707964f + this.head.pitch
-            }
-        } else if (entity.isHoldingTool()) {
+        }
+        if (entity.isHolding(Items.BOW)) {
+            this.rightArm.yaw = -0.1f + this.head.yaw
+            this.leftArm.yaw = 0.1f + this.head.yaw + 0.4f
+            this.rightArm.pitch = -1.5707964f + this.head.pitch
+            this.leftArm.pitch = -1.5707964f + this.head.pitch
+        }
+        // } else
+        if (entity.isHoldingTool()) {
             this.rightArm.pitch = this.rightArm.pitch * 0.5f - 0.31415927f
             this.rightArm.yaw = 0.0f
         }
-        this.animateArms(entity, h)
+        this.animateArms(entity)
     }
 
     private fun getPreferredArm(entity: CustomVillagerEntity): Arm {
         return entity.getMainArm()
     }
 
-    protected fun animateArms(entity: CustomVillagerEntity, animationProgress: Float) {
+    protected fun animateArms(entity: CustomVillagerEntity) {
         if (this.handSwingProgress <= 0.0f) {
             return
         }

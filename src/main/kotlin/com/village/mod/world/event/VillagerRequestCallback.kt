@@ -3,8 +3,8 @@ package com.village.mod.world.event
 import net.fabricmc.fabric.api.event.EventFactory
 import com.village.mod.entity.village.CustomVillagerEntity
 import net.minecraft.util.ActionResult
-import com.village.mod.world.Structure
-import com.village.mod.world.StructureType
+import com.village.mod.village.structure.Structure
+import com.village.mod.village.structure.StructureType
 
 fun interface VillagerRequestCallback {
     companion object {
