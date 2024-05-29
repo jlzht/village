@@ -10,7 +10,7 @@ sealed class Structure() {
     open var capacity: Int = 0
 
     abstract val type: StructureType
-    abstract var area: Area
+    abstract var area: Region
 
     open var errands: HashSet<Errand> = hashSetOf()
     abstract fun peelErrands(): List<Errand>
@@ -29,9 +29,7 @@ sealed class Structure() {
     }
 }
 
-sealed class Area
-
-data class Region(var lower: BlockPos, var upper: BlockPos) : Area() {
+data class Region(var lower: BlockPos, var upper: BlockPos) {
     fun expand(block: BlockPos) {
         this.lower = BlockPos(
             if (block.x < lower.x) block.x else lower.x,
@@ -65,5 +63,3 @@ data class Region(var lower: BlockPos, var upper: BlockPos) : Area() {
             coord.z >= lower.z && coord.z <= upper.z
     }
 }
-
-data class Point(var point: BlockPos) : Area()

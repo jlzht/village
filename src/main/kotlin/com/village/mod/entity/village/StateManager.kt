@@ -18,21 +18,7 @@ class StateManager(private val entity: CustomVillagerEntity) {
     }
 
     fun set(state: State) {
-        when (this.state) {
-            State.SLEEP -> {
-                entity.wakeUp()
-            }
-            State.SWIM -> {
-                entity.getNavigation().setCanSwim(false)
-            } //
-            State.CAST -> {} //
-            State.RIDE -> {} // stop mouting
-            State.IDLE -> {} // do nothing
-            State.SIT -> {
-                //entity.setPose(EntityPose.STANDING)
-            }
-            else -> {}
-        }
+        // TODO: make some type of transtion states, or just ditch this machine state implementation
         this.state = state
     }
     fun get(): State = this.state

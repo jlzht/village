@@ -82,6 +82,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     }
 
     public fun pullBack() {
+        (owner as CustomVillagerEntity).setActing(false)
         remove(RemovalReason.DISCARDED)
     }
 
@@ -96,7 +97,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         val owner = this.getOwner()
         if (owner == null) {
             LOGGER.info("TRIGGER REMOVAL")
-            this.remove(RemovalReason.DISCARDED)
+            remove(RemovalReason.DISCARDED)
             return
         } else {
             (owner as CustomVillagerEntity).lookControl.lookAt(this.x, this.y, this.z, 30.0f, 30.0f)
@@ -105,7 +106,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
             removalTimer++
             if (removalTimer >= 50) {
                 LOGGER.info("TRIGGER REMOVAL TIMEOUT")
-                remove(RemovalReason.DISCARDED)
+                this.pullBack()
                 return
             }
         } else {
@@ -132,7 +133,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
                 if (MathHelper.abs(d.toFloat()) < 0.01) {
                     d += Math.signum(d) * 0.1
                 }
-                fishingTicks++ // be random val
+                fishingTicks++
                 velocity = Vec3d(vec3d.x * 0.9, vec3d.y - d * random.nextFloat() * 0.2, vec3d.z * 0.9)
             }
         }
@@ -167,35 +168,6 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         LOGGER.info("I HIT WATER")
     }
 
-    // private fun isOpenOrWaterAround(pos: BlockPos): Boolean {
-    //    var positionType: PositionType = PositionType.INVALID
-    //    for (i in -1..2) {
-    //        val positionType2: PositionType = getPositionType(pos.add(-2, i, -2), pos.add(2, i, 2))
-    //        when (positionType2) {
-    //            PositionType.INVALID -> return false
-    //            PositionType.ABOVE_WATER -> if (positionType == PositionType.INVALID) return false
-    //            PositionType.INSIDE_WATER -> if (positionType == PositionType.ABOVE_WATER) return false
-    //        }
-    //        positionType = positionType2
-    //    }
-    //    return true
-    // }
-
-    // private fun getPositionType(start: BlockPos, end: BlockPos): PositionType {
-    //    return BlockPos.stream(start, end).map(::getPositionType).reduce { positionType, positionType2 -> if (positionType == positionType2) positionType else PositionType.INVALID }.orElse(PositionType.INVALID)
-    // }
-
-    // private fun getPositionType(pos: BlockPos): PositionType {
-    //    val blockState: BlockState = world.getBlockState(pos)
-    //    return when {
-    //        blockState.isAir || blockState.isOf(Blocks.LILY_PAD) -> PositionType.ABOVE_WATER
-    //        else -> {
-    //            val fluidState: FluidState = blockState.fluidState
-    //            if (fluidState.isIn(FluidTags.WATER) && fluidState.isStill && blockState.getCollisionShape(world, pos).isEmpty) PositionType.INSIDE_WATER else PositionType.INVALID
-    //        }
-    //    }
-    // }
-
     override fun writeCustomDataToNbt(nbt: NbtCompound) {}
 
     override fun readCustomDataFromNbt(nbt: NbtCompound) {}
@@ -225,7 +197,6 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         if (ent != null) {
             this.setRodOwner(null)
         }
-        // setState(State.WORK)
         super.remove(reason)
     }
 

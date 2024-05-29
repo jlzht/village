@@ -6,9 +6,7 @@ import com.village.mod.item.VillageItems
 import com.village.mod.screen.TradingScreenHandler
 import com.village.mod.village.structure.Building
 import com.village.mod.village.structure.Farm
-import com.village.mod.village.structure.Point
 import com.village.mod.village.structure.Pond
-import com.village.mod.village.structure.Region
 import com.village.mod.world.VillageSaverAndLoader
 import com.village.mod.world.event.HandBellUsageCallback
 import com.village.mod.world.event.VillageInteractionCallback
@@ -31,13 +29,9 @@ import net.minecraft.block.entity.BellBlockEntity
 import net.minecraft.entity.EntityDimensions
 import net.minecraft.entity.EntityType
 import net.minecraft.entity.SpawnGroup
-import net.minecraft.item.ItemStack
-import net.minecraft.item.Items
 import net.minecraft.registry.Registries
 import net.minecraft.registry.Registry
-import net.minecraft.registry.tag.BlockTags
 import net.minecraft.screen.ScreenHandlerType
-import net.minecraft.server.world.ServerWorld
 import net.minecraft.text.Text
 import net.minecraft.util.ActionResult
 import net.minecraft.util.Identifier
@@ -80,9 +74,8 @@ object Village : ModInitializer {
     val TEST: Set<BlockState> = listOf(
         Blocks.ANVIL,
         Blocks.JUKEBOX,
-    ).flatMap { block ->
-        block.stateManager.states
-    }.toSet()
+    ).flatMap { block -> block.stateManager.states }
+        .toSet()
 
     val BLACKSMITH: PointOfInterestType = PointOfInterestHelper.register(Identifier(MODID, "blacksmith"), 2, 8, TEST)
 
@@ -92,52 +85,51 @@ object Village : ModInitializer {
 
         VillageInteractionCallback.EVENT.register({ player, pos, name ->
             val manager = VillageSaverAndLoader.getServerState(player.world.getServer()!!)
-                for (village in manager.villages) {
-                    if (village.pos == pos) {
-                        player.sendMessage(Text.translatable("block.village.bell.interaction.full"), true)
-                        return@register ActionResult.FAIL
-                    }
-                    if (village.name == name) {
-                        player.sendMessage(Text.translatable("block.village.bell.interaction.same"), true)
-                        return@register ActionResult.FAIL
-                    }
-                    if (village.pos.getSquaredDistance(pos.toCenterPos()) < 16384.0f) {
-                        player.sendMessage(Text.translatable("block.village.bell.interaction.near"), true)
-                        return@register ActionResult.FAIL
-                    }
+            for (village in manager.villages) {
+                if (village.pos == pos) {
+                    player.sendMessage(Text.translatable("block.village.bell.interaction.full"), true)
+                    return@register ActionResult.FAIL
                 }
-                manager.addVillage(name, pos)
-                player.sendMessage(Text.translatable("block.village.bell.interaction.new").append(Text.translatable(name)), true)
+                if (village.name == name) {
+                    player.sendMessage(Text.translatable("block.village.bell.interaction.same"), true)
+                    return@register ActionResult.FAIL
+                }
+                if (village.pos.getSquaredDistance(pos.toCenterPos()) < 16384.0f) {
+                    player.sendMessage(Text.translatable("block.village.bell.interaction.near"), true)
+                    return@register ActionResult.FAIL
+                }
+            }
+            manager.addVillage(name, pos)
+            player.sendMessage(Text.translatable("block.village.bell.interaction.new").append(Text.translatable(name)), true)
             return@register ActionResult.PASS
         })
 
         VillagerSpawnedCallback.EVENT.register({ entity ->
             entity.world.getServer()?.let { server ->
-                val manager = VillageSaverAndLoader.getServerState(server)
-                manager.villages.filter { it.isLoaded }.firstOrNull()?.let { village ->
-                    village.addVillager(entity)
-                    return@register ActionResult.SUCCESS
-                }
+                VillageSaverAndLoader.getServerState(server).villages
+                    .filter { it.isLoaded }.firstOrNull()?.let {
+                        it.addVillager(entity)
+                        return@register ActionResult.SUCCESS
+                    }
             }
             return@register ActionResult.FAIL
         })
 
         VillagerKilledCallback.EVENT.register({ entity ->
             entity.world.getServer()?.let { server ->
-                val manager = VillageSaverAndLoader.getServerState(server)
-                manager.villages.find { it.id == entity.villageKey }?.let { village ->
-                    village.removeVillager(entity.key)
-                }
+                VillageSaverAndLoader.getServerState(server).villages
+                    .find { it.id == entity.villageKey }?.let {
+                        it.removeVillager(entity.key)
+                    }
             }
             return@register ActionResult.PASS
         })
 
         VillagerRequestCallback.EVENT.register({ entity, type ->
             entity.world.getServer()?.let { server ->
-                val manager = VillageSaverAndLoader.getServerState(server)
-                manager.villages.find { it.id == entity.villageKey }?.let { village ->
-                    val villager = village.villagers.getValue(entity.key)
-                    if (villager != null) {
+                VillageSaverAndLoader.getServerState(server).villages.find { it.id == entity.villageKey }?.let { village ->
+                    village.villagers.getValue(entity.key)?.let {
+                        // if (villager != null) {
                         if (type.ordinal >= 5) {
                             village.assignStructureToVillager(entity.key, type, entity.homeStructure)
                         } else {
@@ -151,8 +143,7 @@ object Village : ModInitializer {
 
         HandBellUsageCallback.EVENT.register({ player, pos, world ->
             world.getServer()?.let { server ->
-                val manager = VillageSaverAndLoader.getServerState(server)
-                for (village in manager.villages) {
+                VillageSaverAndLoader.getServerState(server).villages.forEach { village ->
                     // TODO:
                     // - Make village range be relative to existing structures
                     // - Instead of iterate thru all villages, check for player relation with village | Create a list of UUIDs in village type |
@@ -160,9 +151,9 @@ object Village : ModInitializer {
                         val block = world.getBlockState(pos).getBlock()
                         when (block) {
                             is FarmlandBlock -> {
-                                if (village.isStructureIsRange(32.0f)) {
+                                if (!village.isStructureInRegion(pos)) {
                                     Farm.createStructure(pos, player)?.let { farm ->
-                                        village.addStructure(farm)  
+                                        village.addStructure(farm)
                                         player.sendMessage(Text.translatable("item.village.hand_bell.farm.added"), true)
                                         return@register ActionResult.SUCCESS
                                     }
@@ -173,7 +164,7 @@ object Village : ModInitializer {
                             is BarrelBlock -> {
                                 if (village.isStructureIsRange(8.0f)) {
                                     Pond.createStructure(pos, player)?.let { pond ->
-                                        village.addStructure(pond)  
+                                        village.addStructure(pond)
                                         player.sendMessage(Text.translatable("item.village.hand_bell.pond.added"), true)
                                         return@register ActionResult.SUCCESS
                                     }
@@ -187,12 +178,13 @@ object Village : ModInitializer {
                                     val r = player.blockPos.getSquaredDistance(pos.offset(direction, 1).toCenterPos())
                                     val l = player.blockPos.getSquaredDistance(pos.offset(direction.getOpposite(), 1).toCenterPos())
                                     Building.createStructure(if (r > l) { pos.offset(direction, 1) } else { pos.offset(direction.getOpposite()) }, player)?.let { building ->
-                                        village.addStructure(building)  
+                                        village.addStructure(building)
                                         player.sendMessage(Text.translatable("item.village.hand_bell.building.added"), true)
                                         return@register ActionResult.SUCCESS
                                     }
+                                } else {
+                                    player.sendMessage(Text.translatable("item.village.hand_bell.building.occupied"), true)
                                 }
-                                player.sendMessage(Text.translatable("item.village.hand_bell.building.occupied"), true)
                                 return@register ActionResult.FAIL
                             }
                         }
@@ -204,41 +196,42 @@ object Village : ModInitializer {
 
         ServerEntityEvents.ENTITY_LOAD.register({ entity, serverWorld ->
             if (entity is CustomVillagerEntity) {
-                val manager = VillageSaverAndLoader.getServerState(serverWorld.getServer())
-                manager.villages.find { it.id == entity.villageKey }?.let { village ->
-                    if (entity.key != -1) {
-                        village.villagers[entity.key] = entity
-                        LOGGER.info("| Villager({}) from village: {}, and profession: {}", entity.key, village.name, entity.getProfession()?.type)
-                    } else {
-                        entity.villageKey = -1
-                        LOGGER.info("ORPHANED")
+                VillageSaverAndLoader.getServerState(serverWorld.getServer()).villages
+                    .find { it.id == entity.villageKey }?.let { village ->
+                        if (entity.key != -1) {
+                            village.villagers[entity.key] = entity
+                            LOGGER.info("| Villager({}) from village: {}, and profession: {}", entity.key, village.name, entity.getProfession()?.type)
+                        } else {
+                            entity.villageKey = -1
+                            LOGGER.info("ORPHANED")
+                        }
                     }
-                }
             }
         })
-        // TODO: maybe just check chunks maybe? which is faster?
+        // TODO: maybe just check chunks maybe? which is faster? on spawn signal to village lol
         ServerBlockEntityEvents.BLOCK_ENTITY_LOAD.register({ blockEntity, serverWorld ->
             if (blockEntity is BellBlockEntity) {
-                val manager = VillageSaverAndLoader.getServerState(serverWorld.getServer())
-                for (village in manager.villages) {
-                    if (village.pos == blockEntity.getPos()) {
-                        village.isLoaded = true
-                        LOGGER.info("VILLAGE: {} LOADED", village.name)
-                        LOGGER.info("STRUCTURES: {}", village.structures)
-                    }
-                }
+                VillageSaverAndLoader.getServerState(serverWorld.getServer()).villages.find { it.pos == blockEntity.getPos() }?.let { it.isLoaded = true }
+                // val manager = VillageSaverAndLoader.getServerState(serverWorld.getServer())
+                // for (village in manager.villages) {
+                //    if (village.pos == blockEntity.getPos()) {
+                //        village.isLoaded = true
+                //        LOGGER.info("VILLAGE: {} LOADED", village.name)
+                //        LOGGER.info("STRUCTURES: {}", village.structures)
+                //    }
+                // }
             }
         })
         ServerBlockEntityEvents.BLOCK_ENTITY_UNLOAD.register({ blockEntity, serverWorld ->
             if (blockEntity is BellBlockEntity) {
-                val manager = VillageSaverAndLoader.getServerState(serverWorld.getServer())
-                for (village in manager.villages) {
-                    if (village.pos == blockEntity.getPos()) {
-                        village.isLoaded = false
-                        LOGGER.info("VILLAGE: {} LOADED", village.name)
-                        LOGGER.info("STRUCTURES: {}", village.structures)
-                    }
-                }
+                VillageSaverAndLoader.getServerState(serverWorld.getServer()).villages.find { it.pos == blockEntity.getPos() }?.let { it.isLoaded = false }
+                // for (village in manager.villages) {
+                //    if (village.pos == blockEntity.getPos()) {
+                //        village.isLoaded = false
+                //        LOGGER.info("VILLAGE: {} LOADED", village.name)
+                //        LOGGER.info("STRUCTURES: {}", village.structures)
+                //    }
+                // }
             }
         })
     }

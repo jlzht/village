@@ -7,10 +7,8 @@ import com.village.mod.entity.village.Errand
 import com.village.mod.entity.village.MutablePair
 import com.village.mod.village.structure.Building
 import com.village.mod.village.structure.Farm
-import com.village.mod.village.structure.Point
 import com.village.mod.village.structure.Pond
 import com.village.mod.village.structure.Region
-import com.village.mod.village.structure.Area
 import com.village.mod.village.structure.Structure
 import com.village.mod.village.structure.StructureFactory
 import com.village.mod.village.structure.StructureType
@@ -22,8 +20,6 @@ import net.minecraft.server.MinecraftServer
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.PersistentState
 import net.minecraft.world.World
-
-
 
 class Village(var isLoaded: Boolean, val id: Int, val name: String, val pos: BlockPos) {
     public var structures: HashMap<Int, Structure> = hashMapOf()
@@ -66,6 +62,7 @@ class Village(var isLoaded: Boolean, val id: Int, val name: String, val pos: Blo
             structure.value.owners.remove(id)
         }
     }
+
     public fun assignStructureToVillager(key: Int, type: StructureType, structureAttacher: MutablePair) {
         if (structureAttacher.key != 0) {
             this.structures.entries.filter { it.value.type == type && it.key == structureAttacher.key }.firstOrNull()?.let { structure ->
@@ -83,29 +80,17 @@ class Village(var isLoaded: Boolean, val id: Int, val name: String, val pos: Blo
 
     fun isStructureInRegion(pos: BlockPos): Boolean {
       for (structure in structures.values) {
-          //if (structure.area is Point) {
-          //    if ((structure.area as Point).point == pos) {
-          //        return true
-          //    }
-          //} else {
-              if ((structure.area as Region).contains(pos)) {
+              if (structure.area.contains(pos)) {
                   return true
               }
-          //}
       }
       return false
     }
     fun isStructureIsRange(range: Float): Boolean {
         for (structure in structures.values) {
-          //if (structure.area is Point) {
-          //  if ((structure.area as Point).point.getManhattanDistance(pos) < range) {
-          //      return false
-          //  }
-          //} else {
-            if ((structure.area as Region).center().getManhattanDistance(pos) < range) {
+            if (structure.area.center().getManhattanDistance(pos) < range) {
                 return false
             }
-          //}
         }
         return true
     }
@@ -163,19 +148,13 @@ class VillageSaverAndLoader : PersistentState() {
                 structureData.putInt("StructureEntranceY", (structure.value as Building).entrance.y)
                 structureData.putInt("StructureEntranceZ", (structure.value as Building).entrance.z)
             }
-            if (structure.value.area is Region) {
-                // Use only lower block and store work(blocks needed to arrive at upper)  -> two less intagers to store
-                structureData.putInt("StructureAreaLowerX", (structure.value.area as Region).lower.x)
-                structureData.putInt("StructureAreaLowerY", (structure.value.area as Region).lower.y)
-                structureData.putInt("StructureAreaLowerZ", (structure.value.area as Region).lower.z)
-                structureData.putInt("StructureAreaUpperX", (structure.value.area as Region).upper.x)
-                structureData.putInt("StructureAreaUpperY", (structure.value.area as Region).upper.y)
-                structureData.putInt("StructureAreaUpperZ", (structure.value.area as Region).upper.z)
-            } else {
-                structureData.putInt("StructureAreaPointX", (structure.value.area as Point).point.x)
-                structureData.putInt("StructureAreaPointY", (structure.value.area as Point).point.y)
-                structureData.putInt("StructureAreaPointZ", (structure.value.area as Point).point.z)
-            }
+            // Use only lower block and store work(blocks needed to arrive at upper)  -> two less intagers to store
+            structureData.putInt("StructureAreaLowerX", structure.value.area.lower.x)
+            structureData.putInt("StructureAreaLowerY", structure.value.area.lower.y)
+            structureData.putInt("StructureAreaLowerZ", structure.value.area.lower.z)
+            structureData.putInt("StructureAreaUpperX", structure.value.area.upper.x)
+            structureData.putInt("StructureAreaUpperY", structure.value.area.upper.y)
+            structureData.putInt("StructureAreaUpperZ", structure.value.area.upper.z)
             nbtList.add(structureData)
         }
         return nbtList
@@ -200,7 +179,8 @@ class VillageSaverAndLoader : PersistentState() {
                             BlockPos(sdata.getInt("StructureEntranceX"), sdata.getInt("StructureEntranceY"), sdata.getInt("StructureEntranceZ")),
                         )
                         StructureType.POND.ordinal -> Pond(
-                            BlockPos(sdata.getInt("StructureAreaPointX"), sdata.getInt("StructureAreaPointY"), sdata.getInt("StructureAreaPointZ")),
+                            BlockPos(sdata.getInt("StructureAreaLowerX"), sdata.getInt("StructureAreaLowerY"), sdata.getInt("StructureAreaLowerZ")),
+                            BlockPos(sdata.getInt("StructureAreaUpperX"), sdata.getInt("StructureAreaUpperY"), sdata.getInt("StructureAreaUpperZ"))
                         )
                         StructureType.FARM.ordinal -> Farm(
                             BlockPos(sdata.getInt("StructureAreaLowerX"), sdata.getInt("StructureAreaLowerY"), sdata.getInt("StructureAreaLowerZ")),

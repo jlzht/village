@@ -4,11 +4,12 @@ import com.village.mod.LOGGER
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.entity.village.Errand
 import com.village.mod.village.villager.Action
-import com.village.mod.village.villager.State
 import net.minecraft.block.Block
 import net.minecraft.block.Blocks
-import net.minecraft.entity.EntityPose
+import net.minecraft.block.DoorBlock
 import net.minecraft.entity.ai.goal.Goal
+import net.minecraft.entity.ai.pathing.Path
+import net.minecraft.registry.tag.FluidTags
 import net.minecraft.util.Hand
 import net.minecraft.util.math.Vec3d
 import java.util.EnumSet
@@ -22,7 +23,9 @@ class GotoGoal(private val entity: CustomVillagerEntity) : Goal() {
     private var radius: Float = 0.5f
     private var shouldLookAt = true
     private var ticksInField = 0
+    private var ticksToFade = 0
     private var ticksToConsume = 5
+    private var lastPath: Path? = null
 
     init {
         this.setControls(EnumSet.of(Goal.Control.MOVE, Goal.Control.JUMP, Goal.Control.LOOK))
@@ -30,21 +33,34 @@ class GotoGoal(private val entity: CustomVillagerEntity) : Goal() {
 
     override fun canStart(): Boolean {
         if (entity.errand.isEmpty()) return false
-        // TODO: add a method to check errand priority by making a weighted decision of which errand to pickup instead of get the first
-        this.errand = entity.errand.peek()
-        errand?.let { peeked ->
+        if (entity.isSleeping()) return false
+        if (errand == entity.errand.peek() && errand != null) return false
+        entity.errand.peek().let { peeked ->
             desiredPos = peeked.pos.toCenterPos()
+            LOGGER.info("TIME TO RUN! {}", desiredPos)
             this.checkAction(entity.errand.peek())
             return true
         }
-        return false
     }
 
     override fun shouldContinue(): Boolean {
+        this.canStart()
+        if (ticksToFade >= 600) {
+            this.errand?.let {
+                LOGGER.info("popping - {}", it)
+                entity.errand.pop(it)
+                errand = null
+                ticksToFade = 0
+            }
+        }
         if (ticksInField >= ticksToConsume) {
             ticksInField = 0
             callback?.invoke()
-            entity.errand.pop(errand!!)
+            this.errand?.let {
+                LOGGER.info("popping - {}", it)
+                entity.errand.pop(it)
+                errand = null
+            }
             return false
         }
         return true
@@ -52,14 +68,51 @@ class GotoGoal(private val entity: CustomVillagerEntity) : Goal() {
     override fun shouldRunEveryTick() = true
 
     override fun tick() {
+        LOGGER.info("| {}", errand)
         desiredPos?.let { pos ->
+            if (errand == null) return
+            ticksToFade++
+            if (entity.isTouchingWater() && entity.getFluidHeight(FluidTags.WATER) > entity.getSwimHeight() || entity.isInLava()) {
+                if (entity.getRandom().nextFloat() < 0.5f) {
+                    entity.getJumpControl().setActive()
+                }
+            }
+            this.entity.getNavigation().findPathTo(errand?.pos, 0)?.let { path ->
+                if (errand?.action != Action.SIT && errand?.action != Action.CLOSE && errand?.action != Action.OPEN) {
+                    val kk = path.getCurrentNode().getBlockPos()
+                    if (!kk.equals(errand?.pos)) {
+                        val blockState = world.getBlockState(kk)
+                        if (blockState.getBlock() is DoorBlock) {
+                            if (!blockState.get(DoorBlock.OPEN)) {
+                                val j = Errand(kk, Action.OPEN)
+                                if (!entity.errand.contains(j) && entity.squaredDistanceTo(errand?.pos?.toCenterPos()) > 4.0f) {
+                                    entity.errand.push(j)
+                                    LOGGER.info("OPEN")
+                                }
+                            } else {
+                                val a = Errand(kk, Action.CLOSE)
+                                val direction = blockState.get(DoorBlock.FACING)
+                                val r = entity.blockPos.getSquaredDistance(kk.offset(direction).toCenterPos())
+                                val l = entity.blockPos.getSquaredDistance(kk.offset(direction.getOpposite()).toCenterPos())
+                                entity.errand.push(Errand(if (r > l) { kk.offset(direction) } else { kk.offset(direction.getOpposite()) }, Action.SIT))
+
+                                if (!entity.errand.contains(a)) {
+                                    entity.errand.push(a)
+                                    LOGGER.info("CLOSE")
+                                }
+                            }
+                        }
+                    }
+                }
+                if (errand?.action != Action.CLOSE) {
+                    entity.navigation.startMovingAlong(path, 1.0)
+                }
+            }
             if (entity.squaredDistanceTo(pos) < radius) {
                 if (shouldLookAt) {
                     entity.lookControl.lookAt(pos.x, pos.y + 0.5f, pos.z, 30.0f, 30.0f)
                 }
                 ticksInField++
-            } else {
-                entity.navigation.startMovingTo(pos.x, pos.y, pos.z, speed)
             }
         }
     }
@@ -69,6 +122,7 @@ class GotoGoal(private val entity: CustomVillagerEntity) : Goal() {
         this.callback = callback
         this.speed = speed
         this.shouldLookAt = shouldLookAt
+        ticksInField = 0
     }
 
     private fun checkAction(errand: Errand) {
@@ -76,26 +130,52 @@ class GotoGoal(private val entity: CustomVillagerEntity) : Goal() {
         when (errand.action) {
             Action.TILL -> setAction(2.4f, {
                 entity.world.setBlockState(errand.pos, Blocks.FARMLAND.getDefaultState(), Block.NOTIFY_LISTENERS)
+                ticksToConsume = 10
                 entity.swingHand(Hand.MAIN_HAND)
             })
             Action.PLANT -> setAction(2.4f, {
                 entity.world.setBlockState(errand.pos.up(), Blocks.WHEAT.getDefaultState(), Block.NOTIFY_LISTENERS)
+                ticksToConsume = 15
                 entity.swingHand(Hand.MAIN_HAND)
             })
+            Action.OPEN -> setAction(1.5f, {
+                val k = entity.world.getBlockState(errand.pos)
+                (k.getBlock() as DoorBlock).setOpen(entity, entity.getWorld(), k, errand.pos, true)
+                entity.swingHand(Hand.MAIN_HAND)
+                val direction = k.get(DoorBlock.FACING)
+                val r = entity.blockPos.getSquaredDistance(errand.pos.offset(direction).toCenterPos())
+                val l = entity.blockPos.getSquaredDistance(errand.pos.offset(direction.getOpposite()).toCenterPos())
+                entity.errand.push(Errand(errand.pos, Action.CLOSE))
+                entity.errand.push(Errand(if (r > l) { errand.pos.offset(direction) } else { errand.pos.offset(direction.getOpposite()) }, Action.SIT))
+                LOGGER.info("GOT OPEN")
+                ticksToConsume = 5
+            })
+            Action.CLOSE -> setAction(1.25f, {
+                val k = entity.world.getBlockState(errand.pos)
+                (k.getBlock() as DoorBlock).setOpen(entity, entity.getWorld(), k, errand.pos, false)
+                entity.swingHand(Hand.MAIN_HAND)
+                LOGGER.info("GOT CLOSE")
+                ticksToConsume = 5
+            })
+            Action.BREAK -> setAction(2.4f, {
+                entity.world.breakBlock(errand.pos, true, entity)
+                ticksToConsume = 20
+            })
+
             Action.FISH -> setAction(8.0f, {
                 entity.getNavigation().stop()
-                entity.getProfession()?.castAction(entity)
+                entity.getProfession()?.doWork(entity)
                 entity.swingHand(Hand.MAIN_HAND)
             })
-            Action.MOVE -> setAction(4.0f, {}, 1.5, false)
-            Action.SLEEP -> setAction(1.8f, {
+            Action.MOVE -> setAction(8.0f, {
+                ticksToConsume = 10
+            }, 1.5, false)
+            Action.SLEEP -> setAction(2.8f, {
                 entity.sleep(errand.pos)
-                entity.state.set(State.SLEEP)
             })
-            Action.SIT -> setAction(0.5f, {
-                val destPos: Vec3d = errand.pos.toCenterPos()
-                entity.setPosition(destPos.getX(), destPos.getY(), destPos.getZ())
-                entity.setPose(EntityPose.SITTING)
+            Action.SIT -> setAction(1.15f, {
+                ticksToConsume = 15
+                // entity.sit(errand.pos)
             })
             else -> { LOGGER.info("I WILL DO NOTHING!") }
         }

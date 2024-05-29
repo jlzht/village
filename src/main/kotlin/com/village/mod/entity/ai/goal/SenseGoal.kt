@@ -3,8 +3,6 @@ package com.village.mod.entity.ai.goal
 import com.village.mod.LOGGER
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.village.villager.State
-import com.village.mod.village.villager.Task
-import net.minecraft.entity.Entity
 import net.minecraft.entity.LivingEntity
 import net.minecraft.entity.ai.goal.Goal
 import net.minecraft.entity.mob.Monster
@@ -26,9 +24,9 @@ class SenseGoal(private val entity: CustomVillagerEntity) : Goal() {
         if (entity.random.nextInt(10) != 0) {
             return false
         }
-        this.getNearbyEntities()
-        return target != null
+        return entity.getTarget() == null || entity.isAttacking()
     }
+
     override fun shouldContinue(): Boolean {
         if (entity.state.isAt(State.SLEEP)) {
             return false
@@ -44,11 +42,11 @@ class SenseGoal(private val entity: CustomVillagerEntity) : Goal() {
         }
         if (this.entity.getVisibilityCache().canSee(target)) {
             this.timeWithoutVisibility = 0
-        } else if (++this.timeWithoutVisibility > 20 * 12) {
+        } else if (++this.timeWithoutVisibility > 150) {
             return false
         }
         this.entity.setTarget(target)
-        return true
+        return false
     }
 
     private fun getSearchBox(distance: Double): Box {
@@ -56,22 +54,34 @@ class SenseGoal(private val entity: CustomVillagerEntity) : Goal() {
     }
 
     private fun getNearbyEntities() {
-        val entities = entity.getWorld().getOtherEntities(entity, this.getSearchBox(10.0))
+        val entities = entity.getWorld().getOtherEntities(entity, this.getSearchBox(18.0))
         // TODO: use entities types and positions to make entity decide what to do
         val hostiles = entities.filter { it is Monster }
         if (hostiles.isNotEmpty()) {
             hostiles.filter { entity.getVisibilityCache().canSee(it) }
                 .minByOrNull { entity.blockPos.getSquaredDistance(it.pos) }?.let {
-                    entity.task.set(Task.ALERT)
-                    target = it as LivingEntity
+                    LOGGER.info("sensed monster - {}", it)
+                    entity.setTarget(it as LivingEntity)
+                    entity.setAttacking(true)
+                    return
                 }
+        }
+        if (entity.random.nextInt(32) == 0) {
+            val friendly = entities.filter { it is CustomVillagerEntity }
+            if (friendly.isNotEmpty()) {
+                friendly.filter { entity.getVisibilityCache().canSee(it) && (it as CustomVillagerEntity).target == null && it.errand.isEmpty() }
+                    .minByOrNull { entity.blockPos.getSquaredDistance(it.pos) }?.let {
+                        LOGGER.info("sensed frien")
+                        if (target != it) {
+                            (it as CustomVillagerEntity).setTarget(entity)
+                            entity.setTarget(it as LivingEntity)
+                        }
+                    }
+            }
         }
     }
 
     override fun start() {
-    }
-    override fun stop() {
-        this.entity.setTarget(null)
-        this.target = null
+        this.getNearbyEntities()
     }
 }

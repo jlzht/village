@@ -10,24 +10,21 @@ import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
 
-class Pond(val block: BlockPos) : Structure() {
+class Pond( lower: BlockPos, upper: BlockPos) : Structure() {
     override var type: StructureType = StructureType.POND
     override var capacity: Int = 1
-    override var area: Area = Point(block)
+    override var area: Region = Region(lower, upper)
     override var errands: HashSet<Errand> = hashSetOf()
     override fun peelErrands(): List<Errand> {
         return errands.toList()
     }
     override fun genErrands(world: World) {
         if (errands.isEmpty()) {
-            val pond = (this.area as Point).point
+            val pond = area.center()
             if (world.getBlockState(pond).isOf(Blocks.WATER) && world.getBlockState(pond.up()).isOf(Blocks.AIR)) {
                 errands.append(pond, Action.FISH)
             } else {
-                // Pond.updateStructure()
-                // Pond.deleteStructure()
-                // TODO: remove structure if check fail
-                // LOGGER.info("DID NOT FOUND VALID POND")
+                // TODO: remove structure if check fail by adding signal to remove structures
             }
         }
     }
@@ -47,7 +44,8 @@ class Pond(val block: BlockPos) : Structure() {
             if (!water.isPresent) {
                 return null
             }
-            return Pond(water.get())
+            val wpos = water.get()
+            return Pond(wpos.south().west(), wpos.north().east())
         }
     }
 }

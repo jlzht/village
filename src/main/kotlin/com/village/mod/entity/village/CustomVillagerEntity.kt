@@ -14,6 +14,7 @@ import com.village.mod.village.villager.State
 import com.village.mod.world.event.VillagerKilledCallback
 import com.village.mod.world.event.VillagerSpawnedCallback
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory
+import net.minecraft.enchantment.EnchantmentHelper
 import net.minecraft.entity.Entity
 import net.minecraft.entity.EntityData
 import net.minecraft.entity.EntityDimensions
@@ -24,6 +25,7 @@ import net.minecraft.entity.InventoryOwner
 import net.minecraft.entity.ItemEntity
 import net.minecraft.entity.SpawnReason
 import net.minecraft.entity.ai.goal.Goal
+import net.minecraft.entity.ai.pathing.MobNavigation
 import net.minecraft.entity.attribute.DefaultAttributeContainer
 import net.minecraft.entity.attribute.EntityAttributes
 import net.minecraft.entity.damage.DamageSource
@@ -35,11 +37,15 @@ import net.minecraft.entity.mob.PathAwareEntity
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.entity.player.PlayerInventory
 import net.minecraft.inventory.SimpleInventory
+import net.minecraft.item.ArmorItem
+import net.minecraft.item.BlockItem
 import net.minecraft.item.BowItem
 import net.minecraft.item.CrossbowItem
+import net.minecraft.item.HoeItem
 import net.minecraft.item.Item
 import net.minecraft.item.ItemStack
 import net.minecraft.item.Items
+import net.minecraft.item.MiningToolItem
 import net.minecraft.item.RangedWeaponItem
 import net.minecraft.item.SwordItem
 import net.minecraft.nbt.NbtCompound
@@ -49,6 +55,7 @@ import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.util.ActionResult
 import net.minecraft.util.Hand
 import net.minecraft.util.ItemScatterer
+import net.minecraft.util.collection.DefaultedList
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.LocalDifficulty
 import net.minecraft.world.ServerWorldAccess
@@ -74,8 +81,9 @@ interface InventoryUser : InventoryOwner {
     }
 
     companion object {
-        val swordPredicate: (Item) -> Boolean = { item -> item is SwordItem }
+        val hoePredicate: (Item) -> Boolean = { item -> item is HoeItem }
         val bowPredicate: (Item) -> Boolean = { item -> item is BowItem }
+        val swordPredicate: (Item) -> Boolean = { item -> item is SwordItem }
         val crossbowPredicate: (Item) -> Boolean = { item -> item is CrossbowItem }
         val rangedPredicate: (Item) -> Boolean = { item -> item is RangedWeaponItem }
     }
@@ -143,15 +151,79 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
     }
     public val errand = ActionManager()
     public val state = StateManager(this)
-    public val task = TaskManager()
     public val traitA = 1.0f
     public val traitB = 0.5f
     public fun shouldSleep(time: Float): Boolean {
         val value = Math.cos(time / (4.0 + traitA) + traitB)
         return Math.floor(value) == -1.0
     }
+    public override fun wakeUp() {
+        this.state.set(State.IDLE)
+        super.wakeUp()
+    }
+    public override fun sleep(pos: BlockPos) {
+        this.state.set(State.SLEEP)
+        super.sleep(pos)
+    }
+    public override fun isSleeping(): Boolean {
+        return this.state.isAt(State.SLEEP)
+    }
+
+    public fun sit(pos: BlockPos) {
+        val destPos = pos.toCenterPos()
+        this.setPosition(destPos.getX(), destPos.getY(), destPos.getZ())
+        this.setPose(EntityPose.SITTING)
+    }
+
+    public override fun getSwimHeight(): Double {
+        return 0.6
+    }
+
+    private val heldItems = DefaultedList.ofSize(2, ItemStack.EMPTY)
+    private val armorItems = DefaultedList.ofSize(4, ItemStack.EMPTY)
+
+    override fun getHandItems(): Iterable<ItemStack> {
+        return this.heldItems
+    }
+
+    override fun getArmorItems(): Iterable<ItemStack> {
+        return this.armorItems
+    }
+
+    override fun getEquippedStack(slot: EquipmentSlot): ItemStack {
+        return when (slot.type) {
+            EquipmentSlot.Type.HAND -> this.heldItems[slot.entitySlotId]
+            EquipmentSlot.Type.ARMOR -> this.armorItems[slot.entitySlotId]
+            else -> ItemStack.EMPTY
+        }
+    }
+
+    override fun equipStack(slot: EquipmentSlot, stack: ItemStack) {
+        this.processEquippedStack(stack)
+        when (slot.type) {
+            EquipmentSlot.Type.HAND -> {
+                if (this.inventory.canInsert(this.heldItems.get(slot.entitySlotId))) {
+                    this.inventory.addStack(this.heldItems.get(slot.entitySlotId))
+                } else {
+                    this.dropStack(this.heldItems.get(slot.entitySlotId))
+                }
+                this.onEquipStack(slot, this.heldItems.set(slot.entitySlotId, stack), stack)
+            }
+            EquipmentSlot.Type.ARMOR -> {
+                if (this.inventory.canInsert(this.armorItems.get(slot.entitySlotId))) {
+                    this.inventory.addStack(this.armorItems.get(slot.entitySlotId))
+                } else {
+                    this.dropStack(this.armorItems.get(slot.entitySlotId))
+                }
+                this.onEquipStack(slot, this.armorItems.set(slot.entitySlotId, stack), stack)
+            }
+            else -> ItemStack.EMPTY
+        }
+    }
+
     init {
         this.getNavigation().setCanSwim(false)
+        (this.getNavigation() as MobNavigation).setCanPathThroughDoors(true)
     }
 
     // TODO: MAKE THIS NOT NULLABLE
@@ -163,17 +235,14 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         this.profession = profession
         this.profession.addProfessionTasks(this)
         this.setVillagerData(profession.type.ordinal)
-        val stackInHand = this.getStackInHand(Hand.MAIN_HAND)
-        if (stackInHand.isEmpty && profession.type == ProfessionType.FISHERMAN) {
-            this.equipStack(EquipmentSlot.MAINHAND, ItemStack(Items.FISHING_ROD))
-        }
-        if (stackInHand.isEmpty && profession.type == ProfessionType.FARMER) {
-            this.equipStack(EquipmentSlot.MAINHAND, ItemStack(Items.WOODEN_HOE))
-        }
     }
 
     fun isHoldingTool(): Boolean {
         return !this.getStackInHand(Hand.MAIN_HAND).isEmpty()
+    }
+
+    fun isHoldingSword(): Boolean {
+        return this.getStackInHand(Hand.MAIN_HAND).getItem() is SwordItem
     }
 
     override fun initialize(world: ServerWorldAccess, difficulty: LocalDifficulty, spawnReason: SpawnReason, entityData: EntityData?, entityNbt: NbtCompound?): EntityData? {
@@ -192,10 +261,10 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
     }
 
     override fun initGoals() {
-        goalSelector.add(1, GotoGoal(this))
+        goalSelector.add(0, GotoGoal(this))
         goalSelector.add(1, SenseGoal(this))
-        goalSelector.add(2, AttackGoal(this, 1.0))
-        goalSelector.add(2, ActionGoal(this))
+        goalSelector.add(1, AttackGoal(this, 1.0))
+        goalSelector.add(1, ActionGoal(this))
     }
 
     fun setCharging(charging: Boolean) {
@@ -230,8 +299,17 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         }
         return super.interactMob(player, hand)
     }
+    private var acting: Boolean = false
+    public fun setActing(acting: Boolean) {
+        this.acting = acting
+    }
+    public fun isActing(): Boolean {
+        return this.acting
+    }
 
     override fun tick() {
+        if (!this.errand.isEmpty()) {
+        }
         super.tick()
     }
 
@@ -248,7 +326,8 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         super.remove(reason)
     }
 
-    private val inventory: SimpleInventory = SimpleInventory(8)
+    private val inventory: SimpleInventory = SimpleInventory(9)
+
     public override fun getInventory(): SimpleInventory {
         return this.inventory
     }
@@ -261,8 +340,95 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
         return true
     }
 
+    public override fun canEquip(stack: ItemStack): Boolean {
+        return true
+    }
+
     override fun canGather(stack: ItemStack): Boolean {
-        return this.inventory.canInsert(stack)
+        return this.profession.desiredItems(stack.item) && this.inventory.canInsert(stack)
+    }
+
+    override fun tryEquip(stack: ItemStack): ItemStack {
+        var equipmentSlot = MobEntity.getPreferredEquipmentSlot(stack)
+        var itemStack = getEquippedStack(equipmentSlot)
+        var prefersNew = prefersNewEquipment(stack, itemStack)
+        if (prefersNew && canPickupItem(stack)) {
+            // ItemScatterer.spawn(world, pos.x, pos.y + 1.0, pos.z, equipment)
+            if (this.inventory.canInsert(itemStack)) {
+                this.inventory.addStack(itemStack)
+            } else if (!itemStack.isEmpty) {
+                this.dropStack(itemStack)
+            }
+            if (equipmentSlot.isArmorSlot && stack.count > 1) {
+                val itemStack2 = stack.copy().apply { count = 1 }
+                equipStack(equipmentSlot, itemStack2)
+                return itemStack2
+            }
+            equipStack(equipmentSlot, stack)
+            return stack
+        }
+        return ItemStack.EMPTY
+    }
+
+    protected override fun prefersNewEquipment(newStack: ItemStack, oldStack: ItemStack): Boolean {
+        if (oldStack.isEmpty) {
+            return true
+        }
+        val newItem = newStack.item
+        val oldItem = oldStack.item
+
+        return when (newItem) {
+            is SwordItem -> when (oldItem) {
+                is SwordItem -> {
+                    if (newItem.attackDamage != oldItem.attackDamage) {
+                        newItem.attackDamage > oldItem.attackDamage
+                    } else {
+                        prefersNewDamageableItem(newStack, oldStack)
+                    }
+                }
+                else -> true
+            }
+            is BowItem, is CrossbowItem -> prefersNewDamageableItem(newStack, oldStack)
+            is ArmorItem -> {
+                if (EnchantmentHelper.hasBindingCurse(oldStack)) {
+                    false
+                } else {
+                    val newArmorItem = newItem
+                    val oldArmorItem = oldItem as ArmorItem
+                    if (newArmorItem.protection != oldArmorItem.protection) {
+                        newArmorItem.protection > oldArmorItem.protection
+                    } else if (newArmorItem.toughness != oldArmorItem.toughness) {
+                        newArmorItem.toughness > oldArmorItem.toughness
+                    } else {
+                        prefersNewDamageableItem(newStack, oldStack)
+                    }
+                }
+            }
+            is MiningToolItem -> {
+                when (oldItem) {
+                    is BlockItem -> true
+                    is MiningToolItem -> {
+                        if (newItem.attackDamage != oldItem.attackDamage) {
+                            newItem.attackDamage > oldItem.attackDamage
+                        } else {
+                            prefersNewDamageableItem(newStack, oldStack)
+                        }
+                    }
+                    else -> false
+                }
+            }
+            else -> false
+        }
+    }
+
+    override fun prefersNewDamageableItem(newStack: ItemStack, oldStack: ItemStack): Boolean {
+        return if (newStack.damage < oldStack.damage || newStack.hasNbt() && !oldStack.hasNbt()) {
+            true
+        } else if (newStack.hasNbt() && oldStack.hasNbt()) {
+            newStack.nbt!!.keys.any { it != "Damage" } && oldStack.nbt!!.keys.none { it != "Damage" }
+        } else {
+            false
+        }
     }
 
     protected override fun loot(item: ItemEntity) {
@@ -272,7 +438,7 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
     override fun onDeath(damageSource: DamageSource) {
         LOGGER.info("Villager {} died, message: {}", this as Any, damageSource.getDeathMessage(this).string)
         // var entity: Entity? = damageSource.getAttacker()
-        dropInventoryItems(world, this.getBlockPos())
+        dropInventoryItems(world, this.getBlockPos().up())
         if (this.key != -1) {
             VillagerKilledCallback.EVENT.invoker().interact(this)
         }
@@ -297,6 +463,7 @@ public class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntit
     fun getVillagerData(): Int {
         return this.dataTracker.get(VILLAGER_STAT)
     }
+
     // TODO: use better nbt string name convetion
     override fun readCustomDataFromNbt(nbt: NbtCompound) {
         super.readCustomDataFromNbt(nbt)

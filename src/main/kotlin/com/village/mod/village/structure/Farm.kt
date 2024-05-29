@@ -7,6 +7,7 @@ import net.minecraft.block.Block
 import net.minecraft.block.BlockState
 import net.minecraft.block.Blocks
 import net.minecraft.block.FarmlandBlock
+import net.minecraft.block.CropBlock
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
@@ -14,7 +15,7 @@ import net.minecraft.world.World
 class Farm(val lower: BlockPos, val upper: BlockPos) : Structure() {
     override var type: StructureType = StructureType.FARM
     override var capacity: Int = 1
-    override var area: Area = Region(lower, upper)
+    override var area: Region = Region(lower, upper)
     override var errands: HashSet<Errand> = hashSetOf()
 
     override fun peelErrands(): List<Errand> {
@@ -28,6 +29,11 @@ class Farm(val lower: BlockPos, val upper: BlockPos) : Structure() {
             if (world.getBlockState(pos.up()).isOf(Blocks.AIR)) {
                 return Action.PLANT
             } else {
+                val up = world.getBlockState(pos.up())
+                val upp = up.getBlock()
+                if (upp is CropBlock && upp.isMature(up)) {
+                    return Action.BREAK
+                }
                 return Action.PASS
             }
         }
@@ -66,7 +72,7 @@ class Farm(val lower: BlockPos, val upper: BlockPos) : Structure() {
 
     override fun genErrands(world: World) {
         if (errands.isEmpty()) {
-            val region = (this.area as Region)
+            val region = this.area
             val farmCenter = region.center()
             // SQUARE ITERATION?
             for (x in (region.lower.x - 1)..(region.upper.x + 1)) {
@@ -75,7 +81,11 @@ class Farm(val lower: BlockPos, val upper: BlockPos) : Structure() {
                     if (farmCenter.getManhattanDistance(farmPos) < 12.0f) {
                         val action = getFarmAction(world, farmPos, world.getBlockState(farmPos))
                         if (action != Action.PASS && action != Action.NONE) {
-                            errands.append(farmPos, action)
+                            if (action != Action.BREAK) {
+                                errands.append(farmPos, action)
+                            } else {
+                                errands.append(farmPos.up(), action)
+                            }
                         }
                         if (!region.contains(farmPos)) {
                             region.expand(farmPos)
