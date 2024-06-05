@@ -7,17 +7,18 @@ import com.village.mod.village.profession.Merchant
 import com.village.mod.village.profession.Profession
 import com.village.mod.village.profession.ProfessionType
 import com.village.mod.village.profession.Unemployed
+import com.village.mod.entity.village.CustomVillagerEntity
 
 interface EntityWithProfession {
     fun getProfession(): Profession?
 
-    fun setProfession(professionType: ProfessionType) {
+    fun setProfession(villager: CustomVillagerEntity, professionType: ProfessionType) {
         val profession = when (professionType) {
-            ProfessionType.NONE -> Unemployed()
-            ProfessionType.FARMER -> Farmer()
-            ProfessionType.FISHERMAN -> Fisherman()
-            ProfessionType.MERCHANT -> Merchant()
-            ProfessionType.GUARD -> Guard()
+            ProfessionType.NONE -> Unemployed(villager)
+            ProfessionType.FARMER -> Farmer(villager)
+            ProfessionType.FISHERMAN -> Fisherman(villager)
+            ProfessionType.MERCHANT -> Merchant(villager)
+            ProfessionType.GUARD -> Guard(villager)
         }
         setProfession(profession)
     }

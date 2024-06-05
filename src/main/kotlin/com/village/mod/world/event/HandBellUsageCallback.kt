@@ -2,8 +2,8 @@ package com.village.mod.world.event
 
 import net.fabricmc.fabric.api.event.EventFactory
 import net.minecraft.entity.player.PlayerEntity
-import net.minecraft.util.math.BlockPos
 import net.minecraft.util.ActionResult
+import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
 
 fun interface HandBellUsageCallback {
@@ -23,5 +23,5 @@ fun interface HandBellUsageCallback {
             }
         }
     }
-    fun interact(entity: PlayerEntity,pos: BlockPos, world: World): ActionResult
+    fun interact(entity: PlayerEntity, pos: BlockPos, world: World): ActionResult
 }

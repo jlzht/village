@@ -4,26 +4,26 @@ import com.village.mod.LOGGER
 import com.village.mod.MODID
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.entity.village.Errand
-import com.village.mod.entity.village.MutablePair
 import com.village.mod.village.structure.Building
 import com.village.mod.village.structure.Farm
 import com.village.mod.village.structure.Pond
-import com.village.mod.village.structure.Region
 import com.village.mod.village.structure.Structure
-import com.village.mod.village.structure.StructureFactory
 import com.village.mod.village.structure.StructureType
 import com.village.mod.village.villager.Action
 import net.minecraft.nbt.NbtCompound
 import net.minecraft.nbt.NbtElement
 import net.minecraft.nbt.NbtList
 import net.minecraft.server.MinecraftServer
+import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.PersistentState
 import net.minecraft.world.World
 
-class Village(var isLoaded: Boolean, val id: Int, val name: String, val pos: BlockPos) {
+class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: BlockPos) {
     public var structures: HashMap<Int, Structure> = hashMapOf()
     public var villagers: MutableMap<Int, CustomVillagerEntity?> = mutableMapOf()
+    public var players: MutableMap<Int, PlayerEntity> = mutableMapOf()
+    // UUID - reputation
     constructor(
         isLoaded: Boolean,
         id: Int,
@@ -40,7 +40,7 @@ class Village(var isLoaded: Boolean, val id: Int, val name: String, val pos: Blo
     }
 
     public fun addStructure(structure: Structure) {
-        val key = Village.getAvailableKey(this.structures.map { it.key })
+        val key = Settlement.getAvailableKey(this.structures.map { it.key })
         this.structures[key] = structure
     }
 
@@ -49,11 +49,12 @@ class Village(var isLoaded: Boolean, val id: Int, val name: String, val pos: Blo
     }
 
     public fun addVillager(entity: CustomVillagerEntity) {
-        val key = Village.getAvailableKey(this.villagers.map { it.key })
+        val key = Settlement.getAvailableKey(this.villagers.map { it.key })
         this.villagers[key] = entity
         entity.key = key
         entity.villageKey = this.id
         entity.errand.push(Errand(this.pos, Action.MOVE))
+        LOGGER.info("I SHOULD MOVE LOL")
     }
 
     public fun removeVillager(id: Int) {
@@ -63,28 +64,31 @@ class Village(var isLoaded: Boolean, val id: Int, val name: String, val pos: Blo
         }
     }
 
-    public fun assignStructureToVillager(key: Int, type: StructureType, structureAttacher: MutablePair) {
-        if (structureAttacher.key != 0) {
-            this.structures.entries.filter { it.value.type == type && it.key == structureAttacher.key }.firstOrNull()?.let { structure ->
-                structureAttacher.key = structure.key
-                structureAttacher.structure = structure.value
-            }
-        } else {
-            this.structures.entries.filter { it.value.type == type && (it.value.capacity - it.value.owners.size) > 0 }.firstOrNull()?.let { structure ->
-                structure.value.owners.add(key)
-                structureAttacher.key = structure.key
-                structureAttacher.structure = structure.value
-            }
-        }
+    private fun tryAssignStructureToVillagers() {
+        //this.structures.forEach { structure ->
+            // if (structure.value.hasSpace()) {
+            //    this.villagers.values.forEach { villager ->
+            //        //if (!villager.hasHouse()) {
+            //        //    villager?.let {
+            //        //        StructureType.HOUSE
+            //        //    }
+            //        //} else if (!villager.hasWork()) {
+            //        //    villager?.let {
+            //        //        it.getProfession()?.structureInterest
+            //        //    }
+            //        //}
+            //    }
+            // }
+        //}
     }
 
     fun isStructureInRegion(pos: BlockPos): Boolean {
-      for (structure in structures.values) {
-              if (structure.area.contains(pos)) {
-                  return true
-              }
-      }
-      return false
+        for (structure in structures.values) {
+            if (structure.area.contains(pos)) {
+                return true
+            }
+        }
+        return false
     }
     fun isStructureIsRange(range: Float): Boolean {
         for (structure in structures.values) {
@@ -108,10 +112,10 @@ class Village(var isLoaded: Boolean, val id: Int, val name: String, val pos: Blo
 
 class VillageSaverAndLoader : PersistentState() {
     // TODO: use HashMap inside of a Manager class instead of MutableList
-    var villages: MutableList<Village> = mutableListOf()
+    var villages: MutableList<Settlement> = mutableListOf()
     fun addVillage(name: String, pos: BlockPos) {
-        val k = Village.getAvailableKey(villages.map { it.id })
-        villages.add(Village(false, k, name, pos))
+        val k = Settlement.getAvailableKey(villages.map { it.id })
+        villages.add(Settlement(false, k, name, pos))
     }
     override fun writeNbt(nbt: NbtCompound): NbtCompound {
         nbt.put("Villages", villagesSerialize())
@@ -135,7 +139,6 @@ class VillageSaverAndLoader : PersistentState() {
         return nbtList
     }
     protected fun structureSerialize(structures: HashMap<Int, Structure>): NbtList {
-        LOGGER.info("GOT IN STRUCTURE")
         val nbtList = NbtList()
         for (structure in structures) {
             val structureData: NbtCompound = NbtCompound()
@@ -164,12 +167,12 @@ class VillageSaverAndLoader : PersistentState() {
         fun createFromNbt(tag: NbtCompound): VillageSaverAndLoader {
             val state = VillageSaverAndLoader()
             val villagesNbt = tag.getList("Villages", NbtElement.COMPOUND_TYPE.toInt())
-            for (i in 0..villagesNbt.count() - 1) {
+            for (i in 0 until villagesNbt.size) {
                 val data = villagesNbt.getCompound(i)
                 val villagers = data.getIntArray("VillagersData").toList()
                 val structures = data.getList("StructuresData", NbtElement.COMPOUND_TYPE.toInt())
                 val structureList: HashMap<Int, Structure> = hashMapOf()
-                for (l in 0..structures.count() - 1) {
+                for (l in 0 until structures.size) {
                     val sdata = structures.getCompound(l)
                     val structure: Structure? = when (sdata.getInt("StructureType")) {
                         in 5..8 -> Building(
@@ -180,7 +183,7 @@ class VillageSaverAndLoader : PersistentState() {
                         )
                         StructureType.POND.ordinal -> Pond(
                             BlockPos(sdata.getInt("StructureAreaLowerX"), sdata.getInt("StructureAreaLowerY"), sdata.getInt("StructureAreaLowerZ")),
-                            BlockPos(sdata.getInt("StructureAreaUpperX"), sdata.getInt("StructureAreaUpperY"), sdata.getInt("StructureAreaUpperZ"))
+                            BlockPos(sdata.getInt("StructureAreaUpperX"), sdata.getInt("StructureAreaUpperY"), sdata.getInt("StructureAreaUpperZ")),
                         )
                         StructureType.FARM.ordinal -> Farm(
                             BlockPos(sdata.getInt("StructureAreaLowerX"), sdata.getInt("StructureAreaLowerY"), sdata.getInt("StructureAreaLowerZ")),
@@ -195,7 +198,7 @@ class VillageSaverAndLoader : PersistentState() {
                     }
                 }
                 state.villages.add(
-                    Village(
+                    Settlement(
                         false,
                         data.getInt("VillageKey"),
                         data.getString("VillageName"),

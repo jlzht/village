@@ -1,6 +1,5 @@
 package com.village.mod.client.render.entity
 
-import com.village.mod.LOGGER
 import com.village.mod.entity.projectile.SimpleFishingBobberEntity
 import com.village.mod.entity.village.CustomVillagerEntity
 import net.fabricmc.api.EnvType
@@ -12,6 +11,7 @@ import net.minecraft.client.render.VertexConsumerProvider
 import net.minecraft.client.render.entity.EntityRenderer
 import net.minecraft.client.render.entity.EntityRendererFactory
 import net.minecraft.client.util.math.MatrixStack
+import net.minecraft.entity.Entity
 import net.minecraft.item.ItemStack
 import net.minecraft.item.Items
 import net.minecraft.util.Arm
@@ -20,8 +20,8 @@ import net.minecraft.util.math.MathHelper
 import net.minecraft.util.math.RotationAxis
 import org.joml.Matrix3f
 import org.joml.Matrix4f
-import net.minecraft.entity.Entity
 
+// IDEA: just  inherit FishingBobberEntityRenderer
 @Environment(EnvType.CLIENT)
 class SimpleFishingBobberEntityRenderer(context: EntityRendererFactory.Context) : EntityRenderer<SimpleFishingBobberEntity>(context) {
     companion object {

@@ -2,12 +2,12 @@ package com.village.mod.world.event
 
 import net.fabricmc.fabric.api.event.EventFactory
 import net.minecraft.entity.player.PlayerEntity
-import net.minecraft.util.math.BlockPos
 import net.minecraft.util.ActionResult
+import net.minecraft.util.math.BlockPos
 
 fun interface VillageInteractionCallback {
     companion object {
-        @JvmField //needed for calling from mixins
+        @JvmField // needed for calling from mixins
         val EVENT = EventFactory.createArrayBacked(
             VillageInteractionCallback::class.java,
         ) { listeners ->

@@ -9,12 +9,11 @@ import net.minecraft.block.Blocks
 import net.minecraft.block.DoorBlock
 import net.minecraft.entity.ai.goal.Goal
 import net.minecraft.entity.ai.pathing.Path
-import net.minecraft.registry.tag.FluidTags
 import net.minecraft.util.Hand
 import net.minecraft.util.math.Vec3d
 import java.util.EnumSet
 
-class GotoGoal(private val entity: CustomVillagerEntity) : Goal() {
+class ActGoal(private val entity: CustomVillagerEntity) : Goal() {
     private val world = entity.world
     private var callback: (() -> Unit)? = null
     private var desiredPos: Vec3d? = null
@@ -72,11 +71,6 @@ class GotoGoal(private val entity: CustomVillagerEntity) : Goal() {
         desiredPos?.let { pos ->
             if (errand == null) return
             ticksToFade++
-            if (entity.isTouchingWater() && entity.getFluidHeight(FluidTags.WATER) > entity.getSwimHeight() || entity.isInLava()) {
-                if (entity.getRandom().nextFloat() < 0.5f) {
-                    entity.getJumpControl().setActive()
-                }
-            }
             this.entity.getNavigation().findPathTo(errand?.pos, 0)?.let { path ->
                 if (errand?.action != Action.SIT && errand?.action != Action.CLOSE && errand?.action != Action.OPEN) {
                     val kk = path.getCurrentNode().getBlockPos()
@@ -164,7 +158,7 @@ class GotoGoal(private val entity: CustomVillagerEntity) : Goal() {
 
             Action.FISH -> setAction(8.0f, {
                 entity.getNavigation().stop()
-                entity.getProfession()?.doWork(entity)
+                entity.getProfession()?.doWork()
                 entity.swingHand(Hand.MAIN_HAND)
             })
             Action.MOVE -> setAction(8.0f, {

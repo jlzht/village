@@ -11,15 +11,11 @@ import net.minecraft.registry.tag.ItemTags
 import net.minecraft.util.math.BlockPos
 import com.village.mod.LOGGER
 
-class Farmer() : Profession() {
+class Farmer(villager: CustomVillagerEntity) : Profession(villager) {
     override val type = ProfessionType.FARMER
     override val desiredItems: (Item) -> Boolean = { item -> item is HoeItem || item.defaultStack.isIn(ItemTags.VILLAGER_PLANTABLE_SEEDS) }
     init {
 
-    }
-    // blockInteraction
-    override fun addProfessionTasks(worker: CustomVillagerEntity) {
-        //worker.appendGoal(2, TillingGoal(worker))
     }
     override val structureInterest: StructureType = StructureType.FARM
 }

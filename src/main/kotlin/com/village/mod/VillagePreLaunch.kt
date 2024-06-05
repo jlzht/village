@@ -1,7 +1,5 @@
 package com.village.mod
 
-
-
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint
 import com.llamalad7.mixinextras.MixinExtrasBootstrap
 

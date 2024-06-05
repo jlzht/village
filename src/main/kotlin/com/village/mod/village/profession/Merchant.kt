@@ -5,11 +5,10 @@ import com.village.mod.village.structure.StructureType
 import net.minecraft.item.Items
 import net.minecraft.item.Item
 
-class Merchant() : Profession() {
+class Merchant(villager: CustomVillagerEntity) : Profession(villager) {
     override val type = ProfessionType.MERCHANT
     override val desiredItems: (Item) -> Boolean = { item -> item.defaultStack.isOf(Items.EMERALD) }
     init {
     }
-    override fun addProfessionTasks(worker: CustomVillagerEntity) {}
     override val structureInterest: StructureType = StructureType.MARKET
 }

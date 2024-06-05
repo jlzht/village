@@ -5,11 +5,10 @@ import com.village.mod.village.structure.StructureType
 import net.minecraft.item.Items
 import net.minecraft.item.Item
 
-class Unemployed() : Profession() {
+class Unemployed(villager: CustomVillagerEntity) : Profession(villager) {
     override val type = ProfessionType.NONE
     override val desiredItems: (Item) -> Boolean = { item -> item.defaultStack.isOf(Items.EMERALD) }
     init {
     }
-    override fun addProfessionTasks(worker: CustomVillagerEntity) {}
     override val structureInterest: StructureType = StructureType.NONE
 }
