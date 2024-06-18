@@ -11,16 +11,15 @@ import com.village.mod.LOGGER
 
 class Fisherman(villager: CustomVillagerEntity) : Profession(villager) {
     override val type = ProfessionType.FISHERMAN
-    private var fishHook: SimpleFishingBobberEntity? = null
     override val desiredItems: (Item) -> Boolean = { item -> item is FishingRodItem }
+    override val structureInterest: StructureType = StructureType.POND
+    private var fishHook: SimpleFishingBobberEntity? = null
+    fun getFishHook(): SimpleFishingBobberEntity? = this.fishHook
 
-    public fun getFishHook(): SimpleFishingBobberEntity? {
-        return this.fishHook
-    }
-
-    public fun setFishHook(fishHook: SimpleFishingBobberEntity?) {
+    fun setFishHook(fishHook: SimpleFishingBobberEntity?) {
         this.fishHook = fishHook
     }
+
     override fun canWork(): Boolean {
         if (!villager.isHolding(Items.FISHING_ROD)) {
             val rod = villager.inventory.takeItem({ item -> item is FishingRodItem })
@@ -38,12 +37,4 @@ class Fisherman(villager: CustomVillagerEntity) : Profession(villager) {
             villager.setActing(true)
         }
     }
-
-    public fun TryCatch(villager: CustomVillagerEntity) {
-        if (this.fishHook != null) {
-            (villager.getProfession() as Fisherman).fishHook?.pullBack()
-        }
-    }
-
-    override val structureInterest: StructureType = StructureType.POND
 }

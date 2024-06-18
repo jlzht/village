@@ -14,8 +14,5 @@ import com.village.mod.LOGGER
 class Farmer(villager: CustomVillagerEntity) : Profession(villager) {
     override val type = ProfessionType.FARMER
     override val desiredItems: (Item) -> Boolean = { item -> item is HoeItem || item.defaultStack.isIn(ItemTags.VILLAGER_PLANTABLE_SEEDS) }
-    init {
-
-    }
     override val structureInterest: StructureType = StructureType.FARM
 }

@@ -1,13 +1,12 @@
 package com.village.mod.village.structure
 
-
-import com.village.mod.entity.village.Errand
+import com.village.mod.screen.Response
 import com.village.mod.village.villager.Action
-import net.minecraft.block.Block
+import com.village.mod.world.graph.Node
 import net.minecraft.block.BlockState
 import net.minecraft.block.Blocks
-import net.minecraft.block.FarmlandBlock
 import net.minecraft.block.CropBlock
+import net.minecraft.block.FarmlandBlock
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
@@ -16,12 +15,35 @@ class Farm(val lower: BlockPos, val upper: BlockPos) : Structure() {
     override var type: StructureType = StructureType.FARM
     override var capacity: Int = 1
     override var area: Region = Region(lower, upper)
-    override var errands: HashSet<Errand> = hashSetOf()
 
-    override fun peelErrands(): List<Errand> {
-        val aux = errands.take(8)
-        errands.removeAll(aux)
-        return aux
+    // when farmers can work they will ask for structure entrance Graph#navigate, if structure exist, onAccess is called
+    override fun onAccess(world: World) {
+        super.onAccess(world)
+        this.checkCrops(world)
+    }
+
+    private fun checkCrops(world: World) {
+        // SQUARE ITERATION?
+        val farmCenter = area.center()
+        for (x in (area.lower.x - 1)..(area.upper.x + 1)) {
+            for (z in (area.lower.z - 1)..(area.upper.z + 1)) {
+                val farmPos = BlockPos(x, farmCenter.y, z)
+                if (farmCenter.getManhattanDistance(farmPos) < 12.0f) {
+                    val action = getFarmAction(world, farmPos, world.getBlockState(farmPos))
+                    if (action != Action.PASS && action != Action.NONE) {
+                        if (action != Action.BREAK) {
+                            // future work
+                        } else {
+                            // future work
+                        }
+                    }
+                    // TODO: add check of decrease size of farmland
+                    if (!area.contains(farmPos)) {
+                        area.expand(farmPos)
+                    }
+                }
+            }
+        }
     }
 
     private fun getFarmAction(world: World, pos: BlockPos, block: BlockState): Action {
@@ -30,8 +52,8 @@ class Farm(val lower: BlockPos, val upper: BlockPos) : Structure() {
                 return Action.PLANT
             } else {
                 val up = world.getBlockState(pos.up())
-                val upp = up.getBlock()
-                if (upp is CropBlock && upp.isMature(up)) {
+                val upBlock = up.getBlock()
+                if (upBlock is CropBlock && upBlock.isMature(up)) {
                     return Action.BREAK
                 }
                 return Action.PASS
@@ -70,31 +92,6 @@ class Farm(val lower: BlockPos, val upper: BlockPos) : Structure() {
         return Action.NONE
     }
 
-    override fun genErrands(world: World) {
-        if (errands.isEmpty()) {
-            val region = this.area
-            val farmCenter = region.center()
-            // SQUARE ITERATION?
-            for (x in (region.lower.x - 1)..(region.upper.x + 1)) {
-                for (z in (region.lower.z - 1)..(region.upper.z + 1)) {
-                    val farmPos = BlockPos(x, farmCenter.y, z)
-                    if (farmCenter.getManhattanDistance(farmPos) < 12.0f) {
-                        val action = getFarmAction(world, farmPos, world.getBlockState(farmPos))
-                        if (action != Action.PASS && action != Action.NONE) {
-                            if (action != Action.BREAK) {
-                                errands.append(farmPos, action)
-                            } else {
-                                errands.append(farmPos.up(), action)
-                            }
-                        }
-                        if (!region.contains(farmPos)) {
-                            region.expand(farmPos)
-                        }
-                    }
-                }
-            }
-        }
-    }
     companion object {
         fun createStructure(pos: BlockPos, player: PlayerEntity): Structure? {
             val world = player.world
@@ -104,8 +101,12 @@ class Farm(val lower: BlockPos, val upper: BlockPos) : Structure() {
                 world.getBlockState(pos.south().east()).isOf(Blocks.FARMLAND) ||
                 world.getBlockState(pos.south().west()).isOf(Blocks.FARMLAND)
             ) {
-                return Farm(pos, pos)
+                val farm = Farm(pos, pos)
+                farm.graph.addNode(Node(5, farm.area.center().up(), 0.5f, emptyList()))
+                Response.NEW_STRUCTURE.send(player, farm.type.name)
+                return farm
             } else {
+                Response.NOT_ENOUGHT_MOISTURE.send(player)
                 return null
             }
         }

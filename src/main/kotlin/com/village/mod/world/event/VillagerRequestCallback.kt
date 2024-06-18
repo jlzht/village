@@ -11,9 +11,9 @@ fun interface VillagerRequestCallback {
         val EVENT = EventFactory.createArrayBacked(
             VillagerRequestCallback::class.java,
         ) { listeners ->
-            VillagerRequestCallback { entity, keys ->
+            VillagerRequestCallback { entity, type ->
                 for (listener in listeners) {
-                    val result = listener.interact(entity, keys)
+                    val result = listener.interact(entity, type)
                     if (result != ActionResult.PASS) {
                         return@VillagerRequestCallback result
                     }
@@ -23,5 +23,5 @@ fun interface VillagerRequestCallback {
         }
     }
 
-    fun interact(entity: CustomVillagerEntity, keys: IntArray): ActionResult
+    fun interact(entity: CustomVillagerEntity, type: StructureType): ActionResult
 }

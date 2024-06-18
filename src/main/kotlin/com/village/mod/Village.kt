@@ -2,13 +2,13 @@ package com.village.mod
 
 import com.village.mod.entity.projectile.SimpleFishingBobberEntity
 import com.village.mod.entity.village.CustomVillagerEntity
+import com.village.mod.entity.village.Errand
 import com.village.mod.item.VillageItems
 import com.village.mod.screen.TradingScreenHandler
-import com.village.mod.village.structure.Building
-import com.village.mod.village.structure.Farm
-import com.village.mod.village.structure.Pond
+import com.village.mod.village.villager.Action
 import com.village.mod.world.Settlement
-import com.village.mod.world.VillageSaverAndLoader
+import com.village.mod.screen.Response
+import com.village.mod.world.SettlementLoader
 import com.village.mod.world.event.HandBellUsageCallback
 import com.village.mod.world.event.VillageInteractionCallback
 import com.village.mod.world.event.VillagerKilledCallback
@@ -22,11 +22,8 @@ import net.fabricmc.fabric.api.`object`.builder.v1.entity.FabricDefaultAttribute
 import net.fabricmc.fabric.api.`object`.builder.v1.entity.FabricEntityTypeBuilder
 import net.fabricmc.fabric.api.`object`.builder.v1.world.poi.PointOfInterestHelper
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerType
-import net.minecraft.block.BarrelBlock
 import net.minecraft.block.BlockState
 import net.minecraft.block.Blocks
-import net.minecraft.block.DoorBlock
-import net.minecraft.block.FarmlandBlock
 import net.minecraft.block.entity.BellBlockEntity
 import net.minecraft.entity.EntityDimensions
 import net.minecraft.entity.EntityType
@@ -34,7 +31,6 @@ import net.minecraft.entity.SpawnGroup
 import net.minecraft.registry.Registries
 import net.minecraft.registry.Registry
 import net.minecraft.screen.ScreenHandlerType
-import net.minecraft.text.Text
 import net.minecraft.util.ActionResult
 import net.minecraft.util.Identifier
 import net.minecraft.world.poi.PointOfInterestType
@@ -43,7 +39,7 @@ import org.slf4j.LoggerFactory
 const val MODID = "village"
 val LOGGER = LoggerFactory.getLogger(MODID)
 
-object Village: ModInitializer {
+object Village : ModInitializer {
     val VILLAGER: EntityType<CustomVillagerEntity> =
         Registry.register(
             Registries.ENTITY_TYPE,
@@ -73,112 +69,88 @@ object Village: ModInitializer {
         )
 
     // TODO: register more POIs
-    val TEST: Set<BlockState> = listOf(
+    val TEST: Set<BlockState> = setOf(
         Blocks.ANVIL,
         Blocks.JUKEBOX,
     ).flatMap { block -> block.stateManager.states }
         .toSet()
 
     val BLACKSMITH: PointOfInterestType = PointOfInterestHelper.register(Identifier(MODID, "blacksmith"), 2, 8, TEST)
-    lateinit var villagesr: MutableList<Settlement>
+    lateinit var settlements: MutableList<Settlement>
 
     override fun onInitialize() {
         VillageItems.register()
         FabricDefaultAttributeRegistry.register(VILLAGER, CustomVillagerEntity.createCustomVillagerAttributes())
-
+        // TODO: create a file to handle events, like what I did to WorldRenderEvents
         VillageInteractionCallback.EVENT.register({ player, pos, name ->
-            val manager = VillageSaverAndLoader.getServerState(player.world.getServer()!!)
-            for (village in manager.villages) {
-                if (village.pos == pos) {
-                    player.sendMessage(Text.translatable("block.village.bell.interaction.full"), true)
-                    return@register ActionResult.FAIL
+            player.world.getServer()?.let {
+                val manager = SettlementLoader.getServerState(it)
+                for (village in manager.villages) {
+                    if (village.pos == pos) {
+                        Response.PLACE_IS_SETTLEMENT_ALREADY.send(player)
+                        return@register ActionResult.FAIL
+                    }
+                    if (village.name == name) {
+                        Response.ANOTHER_SETTLEMENT_HAS_NAME.send(player)
+                        return@register ActionResult.FAIL
+                    }
+                    if (village.pos.getSquaredDistance(pos.toCenterPos()) < 16384.0f) {
+                        Response.ANOTHER_SETTLEMENT_NEARBY.send(player)
+                        return@register ActionResult.FAIL
+                    }
                 }
-                if (village.name == name) {
-                    player.sendMessage(Text.translatable("block.village.bell.interaction.same"), true)
-                    return@register ActionResult.FAIL
-                }
-                if (village.pos.getSquaredDistance(pos.toCenterPos()) < 16384.0f) {
-                    player.sendMessage(Text.translatable("block.village.bell.interaction.near"), true)
-                    return@register ActionResult.FAIL
-                }
+
+                manager.addVillage(name, pos, player)
             }
-            manager.addVillage(name, pos)
-            player.sendMessage(Text.translatable("block.village.bell.interaction.new").append(Text.translatable(name)), true)
             return@register ActionResult.PASS
         })
 
-        VillagerSpawnedCallback.EVENT.register({ entity ->
-            villagesr.filter { it.isLoaded }.firstOrNull()?.let {
-                it.addVillager(entity)
-                return@register ActionResult.SUCCESS
+        HandBellUsageCallback.EVENT.register({ player, pos ->
+            // TODO: IMEPLEMENT CHUNK OWNING | with chunk owning this filter will be useless
+            settlements.filter { it.isLoaded && it.pos.getSquaredDistance(pos.toCenterPos()) < 16384.0f }.takeIf { it.isNotEmpty() }?.let {
+                // it.find { it.allies.map { it.uuid }.contains(player.getUuid()) }?.let { settlement ->
+                it.first {
+                    it.createStructure(pos, player)
+                    return@register ActionResult.SUCCESS
+                }
+                Response.NOT_ENOUGHT_REPUTATION.send(player)
+                return@register ActionResult.FAIL
             }
-            LOGGER.info("I WILL FAIL LOL")
-            return@register ActionResult.FAIL
+            Response.NO_SETTLEMENT_NEARBY.send(player)
+            return@register ActionResult.PASS
+        })
+
+        // rethink this
+        VillagerSpawnedCallback.EVENT.register({ entity ->
+            settlements.filter { it.isLoaded }.firstOrNull()?.let {
+                it.addVillager(entity)
+            }
+            return@register ActionResult.PASS
         })
 
         VillagerKilledCallback.EVENT.register({ entity ->
-            villagesr.find { it.id == entity.villageKey }?.let {
+            settlements.find { it.id == entity.villageKey }?.let {
                 it.removeVillager(entity.key)
             }
             return@register ActionResult.PASS
         })
-
-        VillagerRequestCallback.EVENT.register({ entity, keys ->
-            entity.world.getServer()?.let { server ->
-                villagesr.find { it.id == entity.villageKey }?.let { village ->
-                    village.villagers.getValue(entity.key)?.let {
-                        village.structures.filterKeys { it in keys }.values.forEach { _ -> false } // ...
-                    }
-                }
-            }
-            return@register ActionResult.PASS
-        })
-
-        HandBellUsageCallback.EVENT.register({ player, pos, world ->
-            world.getServer()?.let { server ->
-                villagesr.forEach { village ->
-                    // TODO:
-                    // - Make village range be relative to existing structures
-                    // - Instead of iterate thru all villages, check for player relation with village | Create a list of UUIDs in village type |
-                    if (village.isLoaded && village.pos.getSquaredDistance(pos.toCenterPos()) < 16384.0f) {
-                        val block = world.getBlockState(pos).getBlock()
-                        when (block) {
-                            is FarmlandBlock -> {
-                                if (!village.isStructureInRegion(pos)) {
-                                    Farm.createStructure(pos, player)?.let { farm ->
-                                        village.addStructure(farm)
-                                        player.sendMessage(Text.translatable("item.village.hand_bell.farm.added"), true)
-                                        return@register ActionResult.SUCCESS
-                                    }
+        // request structure
+        VillagerRequestCallback.EVENT.register({ entity, type ->
+            settlements.find { it.id == entity.villageKey }?.let { village ->
+                village.villagers.getValue(entity.key)?.let { villager ->
+                    if (entity.attachedNode == -1) {
+                        village.graph.getNodes().toList().minByOrNull { entity.blockPos.getManhattanDistance(it.component2().pos) }?.let {
+                            entity.attachedNode = it.component1()
+                        }
+                    } else {
+                        village.graph.getNode(entity.attachedNode)?.let { kk ->
+                            if (!kk.others.isEmpty()) {
+                                val s = kk.others.random()
+                                village.graph.getNode(s)?.let { ls ->
+                                    entity.attachedNode = s
+                                    entity.errand.push(Errand(ls.pos, Action.MOVE))
                                 }
-                                player.sendMessage(Text.translatable("item.village.hand_bell.farm.occupied"), true)
-                                return@register ActionResult.FAIL
-                            }
-                            is BarrelBlock -> {
-                                if (village.isStructureIsRange(8.0f)) {
-                                    Pond.createStructure(pos, player)?.let { pond ->
-                                        village.addStructure(pond)
-                                        player.sendMessage(Text.translatable("item.village.hand_bell.pond.added"), true)
-                                        return@register ActionResult.SUCCESS
-                                    }
-                                }
-                                player.sendMessage(Text.translatable("item.village.hand_bell.pond.occupied"), true)
-                                return@register ActionResult.FAIL
-                            }
-                            is DoorBlock -> {
-                                if (!village.isStructureInRegion(pos)) {
-                                    val direction = world.getBlockState(pos).get(DoorBlock.FACING)
-                                    val r = player.blockPos.getSquaredDistance(pos.offset(direction, 1).toCenterPos())
-                                    val l = player.blockPos.getSquaredDistance(pos.offset(direction.getOpposite(), 1).toCenterPos())
-                                    Building.createStructure(if (r > l) { pos.offset(direction, 1) } else { pos.offset(direction.getOpposite()) }, player)?.let { building ->
-                                        village.addStructure(building)
-                                        player.sendMessage(Text.translatable("item.village.hand_bell.building.added"), true)
-                                        return@register ActionResult.SUCCESS
-                                    }
-                                } else {
-                                    player.sendMessage(Text.translatable("item.village.hand_bell.building.occupied"), true)
-                                }
-                                return@register ActionResult.FAIL
+                            } else {
                             }
                         }
                     }
@@ -188,13 +160,12 @@ object Village: ModInitializer {
         })
 
         ServerLifecycleEvents.SERVER_STARTED.register({ server ->
-            villagesr = VillageSaverAndLoader.getServerState(server).villages
-            LOGGER.info("I ONLY ONCE KKK - {}", villagesr)
+            settlements = SettlementLoader.getServerState(server).villages
         })
 
-        ServerEntityEvents.ENTITY_LOAD.register({ entity, serverWorld ->
+        ServerEntityEvents.ENTITY_LOAD.register({ entity, _ ->
             if (entity is CustomVillagerEntity) {
-                villagesr.find { it.id == entity.villageKey }?.let { village ->
+                settlements.find { it.id == entity.villageKey }?.let { village ->
                     if (entity.key != -1) {
                         village.villagers[entity.key] = entity
                         LOGGER.info("| Villager({}) from village: {}, and profession: {}", entity.key, village.name, entity.getProfession()?.type)
@@ -205,21 +176,16 @@ object Village: ModInitializer {
                 }
             }
         })
-        // TODO: maybe just check chunks maybe? which is faster? on spawn signal to village lol
-        ServerBlockEntityEvents.BLOCK_ENTITY_LOAD.register({ blockEntity, serverWorld ->
+
+        // TODO: instead of "loading" settlements in a player activates a chunk with BellBlock, make chunks be claimed by Settlement
+        ServerBlockEntityEvents.BLOCK_ENTITY_LOAD.register({ blockEntity, _ ->
             if (blockEntity is BellBlockEntity) {
-                villagesr.find { it.pos == blockEntity.getPos() }?.let {
-                    it.isLoaded = true
-                    val pp = listOf(it.pos.toCenterPos())
-                    serverWorld.getPlayers({ p -> p.blockPos.getSquaredDistance(blockEntity.getPos().toCenterPos()) < 16384.0f }).forEach { pos ->
-                        NodesPacket.sendToClient(pos, pp)
-                    }
-                }
+                settlements.find { it.pos == blockEntity.getPos() }?.let { it.isLoaded = true }
             }
         })
-        ServerBlockEntityEvents.BLOCK_ENTITY_UNLOAD.register({ blockEntity, serverWorld ->
+        ServerBlockEntityEvents.BLOCK_ENTITY_UNLOAD.register({ blockEntity, _ ->
             if (blockEntity is BellBlockEntity) {
-                villagesr.find { it.pos == blockEntity.getPos() }?.let { it.isLoaded = false }
+                settlements.find { it.pos == blockEntity.getPos() }?.let { it.isLoaded = false }
             }
         })
     }

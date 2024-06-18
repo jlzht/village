@@ -12,9 +12,9 @@ fun interface HandBellUsageCallback {
         val EVENT = EventFactory.createArrayBacked(
             HandBellUsageCallback::class.java,
         ) { listeners ->
-            HandBellUsageCallback { player, pos, world ->
+            HandBellUsageCallback { player, pos ->
                 for (listener in listeners) {
-                    val result = listener.interact(player, pos, world)
+                    val result = listener.interact(player, pos)
                     if (result != ActionResult.PASS) {
                         return@HandBellUsageCallback result
                     }
@@ -23,5 +23,5 @@ fun interface HandBellUsageCallback {
             }
         }
     }
-    fun interact(entity: PlayerEntity, pos: BlockPos, world: World): ActionResult
+    fun interact(entity: PlayerEntity, pos: BlockPos): ActionResult
 }

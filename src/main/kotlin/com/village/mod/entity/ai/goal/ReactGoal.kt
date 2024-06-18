@@ -68,12 +68,12 @@ class ReactGoal(private val entity: CustomVillagerEntity, private val speed: Dou
             // Attacking/Fleeing mobs
             if (entity.canAttack() && (entity.getProfession() as Guard).canWork()) {
                 this.targetHandler(livingEntity, shouldMoveTowardsTarget)
-                val profession = (entity.getProfession() as Guard)
-                if (profession.canWork()) {
-                    profession.doWork()
-                    squaredRange = profession.range
+                (entity.getProfession() as Guard).let {
+                    it.doWork()
+                    squaredRange = it.range
                 }
             } else {
+                // get target angle, get most distant angle, if cannot find try create, if cant create get any node
                 //this.fleeHandler(livingEntity)
             }
         } else {

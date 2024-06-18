@@ -2,7 +2,7 @@ package com.village.mod.village.structure
 
 enum class StructureType {
     NONE,
-    BELL,
+    HALL,
     FIRE,
     FARM,
     POND,

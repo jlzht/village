@@ -24,93 +24,23 @@ import kotlin.math.sign
 class Guard(villager: CustomVillagerEntity) : Profession(villager) {
     override val type = ProfessionType.GUARD
     override val desiredItems = ItemPredicate.WEAPON
+    override val structureInterest: StructureType = StructureType.NONE
     private var stage: Stage = Stage.UNLOADED
     private var chargedTicksLeft: Int = 0
     private var unchargedTicksLeft: Int = 10
     private var weapon: Weapon = Weapon.NONE
-    private var arrowSlot: Int = -1
     private var arrowLookupDelay: Long = 0L
     var range: Float = 0.0f
 
-    private fun takeWeapons(predicate: (Item) -> Boolean, range: Float): Boolean {
-        val equipped = this.villager.getStackInHand(Hand.MAIN_HAND)
-        if (predicate(equipped.getItem())) {
-            return true
-        }
-
-        val item = this.villager.inventory.takeItem(predicate)
-        if (item != ItemStack.EMPTY) {
-            // val itemStack = this.villager.getStackInHand(Hand.MAIN_HAND)
-            this.villager.inventory.tryInsert(equipped)
-            this.villager.equipStack(EquipmentSlot.MAINHAND, item)
-            LOGGER.info("taking weapons...")
-            resetCharging()
-            this.range = range
-            return true
-        }
-        return false
-    }
-
     override fun canWork(): Boolean {
-        val ll = this.villager.pos.squaredDistanceTo(villager.target?.pos)
-        return this.villager.health > 4.0f && this.checkWeapon(ll)
-    }
-    private fun hasArrows(): Boolean {
-        val fixed = this.villager.inventory.getFixedField()
-        if (fixed.get(1).isEmpty) {
-            return false
-        }
-        return true
-    }
-
-    private fun checkWeapon(distanceSquared: Double): Boolean {
-        if (stage != Stage.READY && !this.villager.isUsingItem) {
-            if (hasArrows()) {
-                if (distanceSquared >= 10.0f && takeWeapons(ItemPredicate.BOW, 180.0f)) {
-                    weapon = Weapon.BOW; return true
-                } else if (distanceSquared >= 10.0f && takeWeapons(ItemPredicate.CROSSBOW, 225.0f)) {
-                    weapon = Weapon.CROSSBOW; return true
-                }
-            }
-            if (takeWeapons(ItemPredicate.SWORD, 3.0f)) {
-                weapon = Weapon.SWORD; return true
-            }
-            return false
-        }
-        return true
-    }
-
-    private fun deflateProjectiles(livingEntity: LivingEntity, distanceSquared: Double) {
-        // add player check
-        val aux = livingEntity.headYaw - this.villager.headYaw - 180
-        val lookingAngle = if (Math.abs(aux) > 360) (Math.abs(aux) - 360) else Math.abs(aux)
-        val reaction = (-sign((Math.sin((Math.PI / 30.0f) * lookingAngle))))
-        LOGGER.info("REACTION: {} --- {} - {} - {}", reaction, lookingAngle, livingEntity.headYaw, this.villager.headYaw)
-        if (distanceSquared <= 8.0f) { // was 12.0f
-            this.villager.moveControl.strafeTo(if (stage == Stage.LOADING) { -0.5f } else { -1.25f }, 0.0f)
-        } else if (Math.abs(lookingAngle) < 15.0f && !this.villager.isHoldingSword() && villager.target != null) {
-            this.villager.moveControl.strafeTo(0.0f, (if (this.villager.isUsingItem()) { 0.5f } else { 1.25f }) * reaction.toFloat())
-        }
-    }
-
-    private fun resetCharging() {
-        stage = Stage.UNLOADED
-        chargedTicksLeft = 0
-        unchargedTicksLeft = 10
-    }
-
-    private fun attack(target: LivingEntity) {
-        if (this.villager.getBoundingBox().expand(3.0, 1.0, 3.0).intersects(target.getBoundingBox()) && this.villager.getVisibilityCache().canSee(target)) {
-            this.villager.swingHand(Hand.MAIN_HAND)
-            this.villager.tryAttack(target)
-        }
+        val distanceStrategy = this.villager.pos.squaredDistanceTo(villager.target?.pos)
+        return this.villager.health > 4.0f && this.checkWeapon(distanceStrategy)
     }
 
     override fun doWork() {
         val livingEntity = villager.target ?: return
         val distance = villager.squaredDistanceTo(livingEntity)
-        //this.checkWeapon(distance)
-        this.deflateProjectiles(livingEntity, distance)
+        this.dodgeProjectiles(livingEntity, distance)
         when (stage) {
             Stage.UNLOADED -> {
                 if (unchargedTicksLeft <= 0) {
@@ -181,6 +111,75 @@ class Guard(villager: CustomVillagerEntity) : Profession(villager) {
         }
     }
 
+    private fun takeWeapons(predicate: (Item) -> Boolean, range: Float): Boolean {
+        val equipped = this.villager.getStackInHand(Hand.MAIN_HAND)
+        if (predicate(equipped.getItem())) {
+            return true
+        }
+
+        val item = this.villager.inventory.takeItem(predicate)
+        if (item != ItemStack.EMPTY) {
+            // val itemStack = this.villager.getStackInHand(Hand.MAIN_HAND)
+            this.villager.inventory.tryInsert(equipped)
+            this.villager.equipStack(EquipmentSlot.MAINHAND, item)
+            LOGGER.info("taking weapons...")
+            resetCharging()
+            this.range = range
+            return true
+        }
+        return false
+    }
+
+    private fun hasArrows(): Boolean {
+        val fixed = this.villager.inventory.getFixedField()
+        if (fixed.get(1).isEmpty) {
+            return false
+        }
+        return true
+    }
+
+    private fun checkWeapon(distanceSquared: Double): Boolean {
+        if (stage != Stage.READY && !this.villager.isUsingItem) {
+            if (hasArrows()) {
+                if (distanceSquared >= 10.0f && takeWeapons(ItemPredicate.BOW, 180.0f)) {
+                    weapon = Weapon.BOW; return true
+                } else if (distanceSquared >= 10.0f && takeWeapons(ItemPredicate.CROSSBOW, 225.0f)) {
+                    weapon = Weapon.CROSSBOW; return true
+                }
+            }
+            if (takeWeapons(ItemPredicate.SWORD, 3.0f)) {
+                weapon = Weapon.SWORD; return true
+            }
+            return false
+        }
+        return true
+    }
+
+    private fun dodgeProjectiles(livingEntity: LivingEntity, distanceSquared: Double) {
+        // add player check
+        val aux = livingEntity.headYaw - this.villager.headYaw - 180
+        val lookingAngle = if (Math.abs(aux) > 360) (Math.abs(aux) - 360) else Math.abs(aux)
+        val reaction = (-sign((Math.sin((Math.PI / 30.0f) * lookingAngle))))
+        LOGGER.info("REACTION: {} --- {} - {} - {}", reaction, lookingAngle, livingEntity.headYaw, this.villager.headYaw)
+        if (distanceSquared <= 8.0f) { // was 12.0f
+            this.villager.moveControl.strafeTo(if (stage == Stage.LOADING) { -0.5f } else { -1.25f }, 0.0f)
+        } else if (Math.abs(lookingAngle) < 15.0f && !this.villager.isHoldingSword() && villager.target != null) {
+            this.villager.moveControl.strafeTo(0.0f, (if (this.villager.isUsingItem()) { 0.5f } else { 1.25f }) * reaction.toFloat())
+        }
+    }
+
+    private fun resetCharging() {
+        stage = Stage.UNLOADED
+        chargedTicksLeft = 0
+        unchargedTicksLeft = 10
+    }
+
+    private fun attack(target: LivingEntity) {
+        if (this.villager.getBoundingBox().expand(3.0, 1.0, 3.0).intersects(target.getBoundingBox()) && this.villager.getVisibilityCache().canSee(target)) {
+            this.villager.swingHand(Hand.MAIN_HAND)
+            this.villager.tryAttack(target)
+        }
+    }
     private fun shoot(target: LivingEntity, isCrossbow: Boolean) {
         val itemStack = if (isCrossbow) {
             this.villager.getProjectileType(this.villager.getStackInHand(ProjectileUtil.getHandPossiblyHolding(this.villager, Items.CROSSBOW)))
@@ -188,7 +187,7 @@ class Guard(villager: CustomVillagerEntity) : Profession(villager) {
             this.villager.getProjectileType(this.villager.getStackInHand(ProjectileUtil.getHandPossiblyHolding(this.villager, Items.BOW)))
         }
         val projectileEntity: PersistentProjectileEntity = ProjectileUtil.createArrowProjectile(this.villager, itemStack, 1.0f)
-        if (this.villager.random.nextFloat() < 0.2f) {
+        if (this.villager.random.nextFloat() < 0.10f) {
             projectileEntity.setCritical(true)
         }
         if (isCrossbow) {
@@ -240,6 +239,4 @@ class Guard(villager: CustomVillagerEntity) : Profession(villager) {
         LOADED,
         READY,
     }
-
-    override val structureInterest: StructureType = StructureType.NONE
 }

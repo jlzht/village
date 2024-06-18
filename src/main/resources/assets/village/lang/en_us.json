@@ -3,6 +3,8 @@
   "item.village.emerald_bundle": "Emerald Bundle",
   "item.village.hand_bell": "Hand Bell",
   "item.village.hand_bell.farm.added": "A farm was added",
+  "item.village.hand_bell.fail.nearby": "No settlement nearby",
+  "item.village.hand_bell.fail.reputation": "Not enough reputation",
   "item.village.hand_bell.farm.occupied": "There is a farm here already",
   "item.village.hand_bell.pond.added": "A pond was added",
   "item.village.hand_bell.pond.occupied": "There is a structure here already",

@@ -10,7 +10,6 @@ import com.village.mod.entity.ai.pathing.VillagerNavigation
 import com.village.mod.screen.TradingScreenHandler
 import com.village.mod.village.profession.Profession
 import com.village.mod.village.profession.ProfessionType
-import com.village.mod.village.structure.Structure
 import com.village.mod.village.villager.State
 import com.village.mod.world.event.VillagerKilledCallback
 import com.village.mod.world.event.VillagerSpawnedCallback
@@ -48,12 +47,31 @@ import net.minecraft.util.math.BlockPos
 import net.minecraft.world.LocalDifficulty
 import net.minecraft.world.ServerWorldAccess
 import net.minecraft.world.World
-import kotlin.math.PI
-import kotlin.math.floor
-import kotlin.math.sin
 
-// class VillagerData
+class OwnershipManager() {
+    private val structures: MutableList<Int> = mutableListOf()
+    fun addHome(data: Int) = structures.addFirst(data)
+    fun addWork(data: Int) = structures.addLast(data)
+    fun getHome(): Int? = if (hasHome()) { structures.firstOrNull() } else { null }
+    fun getWork(): Int? = if (hasWork()) { structures.lastOrNull() } else { null }
+    fun removeHome(): Int? = if (hasHome()) structures.removeAt(0) else null
+    fun removeWork(): Int? = if (hasWork()) structures.removeAt(structures.size - 1) else null
+    fun hasHome(): Boolean = !structures.isEmpty()
+    fun hasWork(): Boolean = structures.size >= 2
+}
 
+// class TraitsManager() {
+//    val values: Array<Float> = Array(8) { (0..1).random().toFloat() }
+//    fun initTraits() {} // first spawn
+//    fun loadTraits() {} // nbt read
+//    fun getTraits(index: Int): Float = values[index]
+//    fun setTrait(index: Int, value: Float) {
+//        values[index] = value
+//    }
+// }
+
+// TODO: rename CustomVillagerEntity to AbstractVillagerEntity
+// IDEAS: stop inheriting MobEntity
 // TODO: make it suitable for preferred hand selection
 class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, world: World?) :
     MobEntity(entityType, world), // can use LivingEntity directly?  -> less overhead -> migrate to task system
@@ -103,65 +121,27 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
         }
     }
 
-    // var Node: Int
     override fun createNavigation(world: World): EntityNavigation {
         return VillagerNavigation(this, world)
     }
 
-    var key: Int = 0
-    var villageKey: Int = 0
+    var key: Int = -1
+    var villageKey: Int = -1
+    var attachedNode: Int = -1
 
     fun hasVillage(): Boolean {
         return this.key != -1
     }
+    fun canWork() = this.profession.canWork()
 
-    val structures: ArrayList<Structure> = arrayListOf()
-
-    fun hasHome(): Boolean {
-        return !this.structures.isEmpty()
-    }
-
-    fun hasWork(): Boolean {
-        return this.structures.map { it.type }.contains(this.profession.structureInterest)
-    }
+    fun getStructureOfInterest() = this.profession.structureInterest
 
     val inventory: VillagerInventory = VillagerInventory(this)
 
     val state = StateManager(this)
     val errand = ActionManager()
-
-    // FIELD0 FIELD1 FIELD2
-    val traitA = 1.0f
-    val traitB = 0.5f
-
-    //fun shouldSleep(time: Float): Boolean {
-    //    val value = Math.cos(time / (4.0 + traitA) + traitB)
-    //    return Math.floor(value) == -1.0
-    //}
-
-    // this.getErrandAction = | getSleepingAction() // getWorkingActions() //getIdlingAction() |
-    fun updateGroupAction(time: Float) {
-        val a = Math.sin(Math.PI * (time + 2 * (1 - this.traitA)) / (2 * (6 - this.traitB)))
-        val b = Math.sin(Math.PI * ((time - 2) - (1 - this.traitA)) / (2 * (3 + this.traitB)))
-        val g = floor(1 - a) * floor(2 - b)
-        LOGGER.info("Group: {}", g)
-        when (g) {
-            0.0 -> {
-                if (this.hasHome() && !this.isSleeping()) {
-                    // NodeGraphManagerCallback // Request owned node to SLEEP
-                    // VillageGraphNodeManager -> {}
-                    // this.structures.getErrands(world)
-                } // SLEEP
-            }
-            1.0 -> {
-                if (this.hasWork() && this.profession.canWork()) {
-                }
-            } // WORK
-            2.0 -> {
-                if (this.isSleeping()) this.wakeUp()
-            } // IDLE
-        }
-    }
+    val intr = OwnershipManager()
+    // val traits = TraitsManager()
 
     override fun wakeUp() {
         super.wakeUp()
@@ -235,12 +215,14 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
     }
 
     init {
+        // tweak this... alot
         this.getNavigation().setCanSwim(false)
         (this.getNavigation() as MobNavigation).setCanPathThroughDoors(true)
     }
 
-    // TODO: MAKE THIS NOT NULLABLE
     private lateinit var profession: Profession
+
+    // TODO: MAKE THIS NOT NULLABLE
     override fun getProfession(): Profession? {
         return if (::profession.isInitialized) { this.profession } else { null }
     }
@@ -380,4 +362,14 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
         nbt.putInt("VillageKey", this.villageKey)
         nbt.putInt("Key", this.key)
     }
+
+    // fun encodeTrait(traits: Array<Float>): NbtList {
+    //  val nbtList = NbtList()
+    //  val data = NbtCompound()
+    //  data.putFloat("dexterity", this.traits.values[0])
+    //  data.putFloat("endurance", this.traits.values[1])
+    //  data.putFloat("agility", this.traits.values[2])
+    //  nbtList.add(data)
+    //  return nbtList
+    // }
 }

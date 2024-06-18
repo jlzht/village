@@ -3,6 +3,7 @@ package com.village.mod.entity.village
 import com.village.mod.village.villager.State
 import com.village.mod.entity.village.CustomVillagerEntity
 
+// TODO: make some type of transtion states, or just ditch this machine state implementation
 class StateManager(private val entity: CustomVillagerEntity) {
     private var state: State = State.NONE
     protected var lock = false
@@ -18,7 +19,6 @@ class StateManager(private val entity: CustomVillagerEntity) {
     }
 
     fun set(state: State) {
-        // TODO: make some type of transtion states, or just ditch this machine state implementation
         this.state = state
     }
     fun get(): State = this.state

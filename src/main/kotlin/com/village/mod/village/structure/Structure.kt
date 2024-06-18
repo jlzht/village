@@ -1,31 +1,18 @@
 package com.village.mod.village.structure
 
-import com.village.mod.entity.village.Errand
-import com.village.mod.village.villager.Action
+import com.village.mod.world.graph.Graph
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
 
 sealed class Structure() {
-    open var owners: MutableList<Int> = mutableListOf()
-    open var capacity: Int = 0
+    open var owners = mutableListOf<Int>()
+    open var capacity: Int = 0 // TODO: capacity should just the count of Graph nodes with id of furniture
+    val graph = Graph<Int>()
 
     abstract val type: StructureType
     abstract var area: Region
-
-    open var errands: HashSet<Errand> = hashSetOf()
-    abstract fun peelErrands(): List<Errand>
-    abstract fun genErrands(world: World)
-    fun HashSet<Errand>.append(pos: BlockPos, action: Action) {
-        this.add(Errand(pos, action))
-    }
-    fun getErrands(world: World): List<Errand> {
-        if (errands.isEmpty()) {
-            this.genErrands(world)
-            if (!errands.isEmpty()) {
-                return peelErrands()
-            }
-        }
-        return peelErrands()
+    open fun onAccess(world: World) {
+        // TODO: add method to check if structure is valid (no holes, enough furniture and light)
     }
 }
 

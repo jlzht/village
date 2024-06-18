@@ -163,7 +163,7 @@ class ActGoal(private val entity: CustomVillagerEntity) : Goal() {
             })
             Action.MOVE -> setAction(8.0f, {
                 ticksToConsume = 10
-            }, 1.5, false)
+            }, 0.5, false)
             Action.SLEEP -> setAction(2.8f, {
                 entity.sleep(errand.pos)
             })

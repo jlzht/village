@@ -1,6 +1,5 @@
 package com.village.mod.item
 
-import com.village.mod.LOGGER
 import com.village.mod.world.event.HandBellUsageCallback
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.item.Item
@@ -10,8 +9,6 @@ import net.minecraft.util.TypedActionResult
 import net.minecraft.util.hit.BlockHitResult
 import net.minecraft.util.hit.HitResult
 import net.minecraft.util.math.BlockPos
-import net.minecraft.util.math.ChunkPos
-import net.minecraft.util.math.MathHelper
 import net.minecraft.world.RaycastContext
 import net.minecraft.world.World
 
@@ -27,7 +24,7 @@ class HandBellItem(settings: Settings) : Item(settings) {
             user.getItemCooldownManager().set(this, 45)
             if (!world.isClient) {
                 itemStack.damage(1, user) { p -> p.sendToolBreakStatus(hand) }
-                HandBellUsageCallback.EVENT.invoker().interact(user, pos, world)
+                HandBellUsageCallback.EVENT.invoker().interact(user, pos)
                 return TypedActionResult.success(itemStack, world.isClient)
             }
             return TypedActionResult.fail(itemStack)

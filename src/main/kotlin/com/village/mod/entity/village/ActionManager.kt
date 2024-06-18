@@ -5,8 +5,8 @@ import net.minecraft.util.math.BlockPos
 import com.village.mod.LOGGER
 import java.util.Stack
 
+// work based of POIS, beds, workplace
 data class Errand(val pos: BlockPos, val action: Action)
-
 
 class ActionManager {
     private val targetBlock: Stack<Errand> = Stack<Errand>()

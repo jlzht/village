@@ -23,7 +23,7 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
     private val held = DefaultedList.ofSize(2, ItemStack.EMPTY)
     private val main = DefaultedList.ofSize(9, ItemStack.EMPTY)
     private val armor = DefaultedList.ofSize(4, ItemStack.EMPTY)
-    private val fixed = DefaultedList.ofSize(2, ItemStack.EMPTY)
+    private val fixed = DefaultedList.ofSize(2, ItemStack.EMPTY) // extra slots for frequent consumable stuff E.g arrows, emeralds
     private val merged: List<DefaultedList<ItemStack>> = ImmutableList.of(this.held, this.main, this.fixed, this.armor)
 
     fun setArmorField(id: Int, itemStack: ItemStack): ItemStack {
@@ -71,6 +71,7 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
         }
     }
 
+    // FIXME: revist this
     fun specialItemHandle(itemStack: ItemStack): ItemStack {
         LOGGER.info("GOT HERE!")
         val kk = itemStack.copy()
@@ -132,6 +133,7 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
         }
         return ItemStack.EMPTY
     }
+
     fun findItem(predicate: (Item) -> Boolean): Int {
         for (i in 0 until main.size) {
             val stack = this.getStack(i)
@@ -311,6 +313,7 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
         this.clear()
     }
 
+    // find usage for listeners
     override fun markDirty() {}
 
     override fun canPlayerUse(player: PlayerEntity): Boolean {

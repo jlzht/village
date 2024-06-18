@@ -73,10 +73,6 @@ class VillagerSpawner : SpecialSpawner {
     }
 
     private fun spawnVillager(world: ServerWorld, pos: BlockPos): Boolean {
-        // val blockState: BlockState = world.getBlockState(pos)
-        // if (SpawnHelper.isClearForSpawn(world, pos, blockState, blockState.fluidState, EntityType.PILLAGER)) {
-        //    return false
-        // }
         val entity: CustomVillagerEntity? = Village.VILLAGER.create(world)
         if (entity != null) {
             entity.setPosition(pos.getX().toDouble(), pos.getY().toDouble(), pos.getZ().toDouble())
