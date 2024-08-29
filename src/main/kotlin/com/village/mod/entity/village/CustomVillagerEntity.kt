@@ -1,7 +1,8 @@
 package com.village.mod.entity.village
 
 import com.village.mod.LOGGER
-import com.village.mod.entity.ai.EntityWithProfession
+import com.village.mod.action.Action
+import com.village.mod.action.Errand
 import com.village.mod.entity.ai.goal.ActGoal
 import com.village.mod.entity.ai.goal.PercieveGoal
 import com.village.mod.entity.ai.goal.PlanGoal
@@ -10,9 +11,7 @@ import com.village.mod.entity.ai.pathing.VillagerNavigation
 import com.village.mod.screen.TradingScreenHandler
 import com.village.mod.village.profession.Profession
 import com.village.mod.village.profession.ProfessionType
-import com.village.mod.village.villager.State
-import com.village.mod.world.event.VillagerKilledCallback
-import com.village.mod.world.event.VillagerSpawnedCallback
+import com.village.mod.world.SettlementManager
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory
 import net.minecraft.entity.Entity
 import net.minecraft.entity.EntityData
@@ -30,7 +29,7 @@ import net.minecraft.entity.damage.DamageSource
 import net.minecraft.entity.data.DataTracker
 import net.minecraft.entity.data.TrackedData
 import net.minecraft.entity.data.TrackedDataHandlerRegistry
-import net.minecraft.entity.mob.MobEntity
+import net.minecraft.entity.mob.PathAwareEntity
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.entity.player.PlayerInventory
 import net.minecraft.item.ItemStack
@@ -41,75 +40,63 @@ import net.minecraft.nbt.NbtElement
 import net.minecraft.network.PacketByteBuf
 import net.minecraft.screen.ScreenHandler
 import net.minecraft.server.network.ServerPlayerEntity
+import net.minecraft.sound.SoundCategory
+import net.minecraft.sound.SoundEvents
 import net.minecraft.util.ActionResult
 import net.minecraft.util.Hand
+import net.minecraft.util.UseAction
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.LocalDifficulty
 import net.minecraft.world.ServerWorldAccess
 import net.minecraft.world.World
 
-class OwnershipManager() {
-    private val structures: MutableList<Int> = mutableListOf()
-    fun addHome(data: Int) = structures.addFirst(data)
-    fun addWork(data: Int) = structures.addLast(data)
-    fun getHome(): Int? = if (hasHome()) { structures.firstOrNull() } else { null }
-    fun getWork(): Int? = if (hasWork()) { structures.lastOrNull() } else { null }
-    fun removeHome(): Int? = if (hasHome()) structures.removeAt(0) else null
-    fun removeWork(): Int? = if (hasWork()) structures.removeAt(structures.size - 1) else null
-    fun hasHome(): Boolean = !structures.isEmpty()
-    fun hasWork(): Boolean = structures.size >= 2
-}
-
-// class TraitsManager() {
-//    val values: Array<Float> = Array(8) { (0..1).random().toFloat() }
-//    fun initTraits() {} // first spawn
-//    fun loadTraits() {} // nbt read
-//    fun getTraits(index: Int): Float = values[index]
-//    fun setTrait(index: Int, value: Float) {
-//        values[index] = value
-//    }
-// }
-
-// TODO: rename CustomVillagerEntity to AbstractVillagerEntity
-// IDEAS: stop inheriting MobEntity
-// TODO: make it suitable for preferred hand selection
+// TODO:
+// - rename CustomVillagerEntity to AbstractVillagerEntity
+// - make it suitable for preferred hand selection
+// - add eating action and methods
 class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, world: World?) :
-    MobEntity(entityType, world), // can use LivingEntity directly?  -> less overhead -> migrate to task system
-    ExtendedScreenHandlerFactory,
-    EntityWithProfession {
+    PathAwareEntity(entityType, world),
+    ExtendedScreenHandlerFactory {
 
-    companion object {
-        const val INVENTORY_KEY = "Inventory"
-        const val VILLAGER_PROFESSION = "VillagerProfession"
-        const val VILLAGER_STATE = "VillagerState"
+    private fun calculatePriority(): (Errand) -> Double = { (cid, p) ->
+        Action.get(cid).scan(this, p).toDouble() //+ (1 - (this.blockPos.getManhattanDistance(p) / 2048.0))
+    }
 
-        // val VILLAGER_STAT: TrackedData<Int> =
-        //    DataTracker.registerData(
-        //        CustomVillagerEntity::class.java,
-        //        TrackedDataHandlerRegistry.INTEGER,
-        //    )
-        val CHARGING: TrackedData<Boolean> =
-            DataTracker.registerData(
-                CustomVillagerEntity::class.java,
-                TrackedDataHandlerRegistry.BOOLEAN,
-            )
-        fun createCustomVillagerAttributes(): DefaultAttributeContainer.Builder {
-            return MobEntity.createMobAttributes()
-                .add(EntityAttributes.GENERIC_MAX_HEALTH, 20.0)
-                .add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 0.5)
-                .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.25)
-                .add(EntityAttributes.GENERIC_ARMOR, 0.0)
-        }
+    private val errandsManager = ErrandManager(this, { null }, { null }, calculatePriority())
+
+    fun getErrandsManager(): ErrandManager {
+        return errandsManager
+    }
+
+    val inventory: VillagerInventory = VillagerInventory(this)
+    private lateinit var profession: Profession
+
+    var key: Int = -1
+    var villageKey: Int = -1
+
+    init {
+        this.getNavigation().setCanSwim(false)
+        (this.getNavigation() as MobNavigation).setCanPathThroughDoors(true)
     }
 
     override fun initDataTracker() {
         super.initDataTracker()
         dataTracker.startTracking(CHARGING, false)
-        // dataTracker.startTracking(VILLAGER_STAT, 0)
     }
 
-    protected val SITTING_DIMENSIONS: EntityDimensions = EntityDimensions.fixed(0.6f, 1.35f)
-    protected val STANDING_DIMENSIONS: EntityDimensions = EntityDimensions.fixed(0.6f, 1.95f)
+    override fun initialize(world: ServerWorldAccess, difficulty: LocalDifficulty, spawnReason: SpawnReason, entityData: EntityData?, entityNbt: NbtCompound?): EntityData? {
+        if (spawnReason == SpawnReason.COMMAND || spawnReason == SpawnReason.SPAWN_EGG || SpawnReason.isAnySpawner(spawnReason) || spawnReason == SpawnReason.DISPENSER) {
+        }
+        SettlementManager.setProfession(this)
+        return super.initialize(world, difficulty, spawnReason, entityData, entityNbt)
+    }
+
+    override fun initGoals() {
+        goalSelector.add(0, PercieveGoal(this))
+        goalSelector.add(0, ReactGoal(this))
+        goalSelector.add(0, ActGoal(this))
+        goalSelector.add(1, PlanGoal(this))
+    }
 
     override fun getDimensions(pose: EntityPose): EntityDimensions {
         return if (pose == EntityPose.SLEEPING) {
@@ -125,41 +112,39 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
         return VillagerNavigation(this, world)
     }
 
-    var key: Int = -1
-    var villageKey: Int = -1
-    var attachedNode: Int = -1
-
     fun hasVillage(): Boolean {
-        return this.key != -1
+        return this.key != 0 && this.villageKey != 0
     }
-    fun canWork() = this.profession.canWork()
-
-    fun getStructureOfInterest() = this.profession.structureInterest
-
-    val inventory: VillagerInventory = VillagerInventory(this)
-
-    val state = StateManager(this)
-    val errand = ActionManager()
-    val intr = OwnershipManager()
-    // val traits = TraitsManager()
 
     override fun wakeUp() {
         super.wakeUp()
-        this.state.set(State.IDLE)
     }
     override fun sleep(pos: BlockPos) {
-        this.state.set(State.SLEEP)
         super.sleep(pos)
     }
-    override fun isSleeping(): Boolean {
-        return this.state.isAt(State.SLEEP)
+
+    fun isSitting(): Boolean {
+        return this.pose == EntityPose.SITTING
     }
 
     fun sit(pos: BlockPos) {
-        val destPos = pos.toCenterPos()
-        this.setPosition(destPos.getX(), destPos.getY(), destPos.getZ())
-        this.state.set(State.SIT)
+        val target = pos.toCenterPos()
+        this.setPosition(target.getX(), target.getY(), target.getZ())
         this.setPose(EntityPose.SITTING)
+    }
+
+    fun isEating(): Boolean {
+        val stack = this.getActiveItem()
+        return stack.getUseAction() == UseAction.EAT
+    }
+
+    override fun eatFood(world: World, stack: ItemStack): ItemStack {
+        world.playSound(null, this.getX(), this.getY(), this.getZ(), SoundEvents.ENTITY_PLAYER_BURP, SoundCategory.PLAYERS, 0.5F, world.random.nextFloat() * 0.1F + 0.9F)
+        if (stack.isFood()) {
+            stack.decrement(1)
+        }
+        super.eatFood(world, stack)
+        return stack
     }
 
     override fun getSwimHeight(): Double {
@@ -214,50 +199,38 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
         }
     }
 
-    init {
-        // tweak this... alot
-        this.getNavigation().setCanSwim(false)
-        (this.getNavigation() as MobNavigation).setCanPathThroughDoors(true)
-    }
-
-    private lateinit var profession: Profession
-
-    // TODO: MAKE THIS NOT NULLABLE
-    override fun getProfession(): Profession? {
+    fun getProfession(): Profession? {
         return if (::profession.isInitialized) { this.profession } else { null }
     }
-    override fun setProfession(profession: Profession) {
-        this.profession = profession
+
+    fun setProfession(type: ProfessionType) {
+        LOGGER.info("SETTING PROFESSION: {}", type.name)
+        this.profession = Profession.get(this, type)
     }
 
-    fun isHoldingTool(): Boolean {
+    fun getStructureOfInterest() = this.profession.structureInterest
+
+    // get rid of this method
+    fun isHoldingToolR(): Boolean {
         return !this.getStackInHand(Hand.MAIN_HAND).isEmpty()
     }
 
+    fun isHoldingToolL(): Boolean {
+        return !this.getStackInHand(Hand.OFF_HAND).isEmpty()
+    }
+
+
+    // get rid of this method
     fun isHoldingSword(): Boolean {
         return this.getStackInHand(Hand.MAIN_HAND).getItem() is SwordItem
     }
 
-    override fun initialize(world: ServerWorldAccess, difficulty: LocalDifficulty, spawnReason: SpawnReason, entityData: EntityData?, entityNbt: NbtCompound?): EntityData? {
-        if (spawnReason == SpawnReason.COMMAND || spawnReason == SpawnReason.SPAWN_EGG || SpawnReason.isAnySpawner(spawnReason) || spawnReason == SpawnReason.DISPENSER) {
-        }
-        // setProfession(this, ProfessionType.values()[Random.nextInt(5)])
-        setProfession(this, ProfessionType.GUARD)
-        VillagerSpawnedCallback.EVENT.invoker().interact(this)
-        return super.initialize(world, difficulty, spawnReason, entityData, entityNbt)
-    }
-
-    override fun initGoals() {
-        goalSelector.add(0, PercieveGoal(this))
-        goalSelector.add(1, ReactGoal(this, 1.0))
-        goalSelector.add(0, ActGoal(this))
-        goalSelector.add(1, PlanGoal(this))
-    }
-
+    // get rid of this method
     fun setCharging(charging: Boolean) {
         dataTracker.set(CHARGING, charging)
     }
 
+    // get rid of this method
     fun isCharging(): Boolean {
         return dataTracker.get(CHARGING)
     }
@@ -282,14 +255,6 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
             return ActionResult.success(this.getWorld().isClient)
         }
         return super.interactMob(player, hand)
-    }
-
-    private var acting: Boolean = false
-    fun setActing(acting: Boolean) {
-        this.acting = acting
-    }
-    fun isActing(): Boolean {
-        return this.acting
     }
 
     override fun tick() {
@@ -318,10 +283,10 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
     }
 
     override fun canGather(stack: ItemStack): Boolean {
-        return this.profession.desiredItems(stack.item) && this.inventory.canInsert(stack)
+        return this.profession.desiredItems.any { p -> p(stack.item) } && this.inventory.canInsert(stack)
     }
 
-    protected override fun loot(item: ItemEntity) {
+    override fun loot(item: ItemEntity) {
         this.inventory.pickUpItem(item)
     }
     override fun damageArmor(source: DamageSource, amount: Float) {
@@ -331,15 +296,21 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
     override fun onDeath(damageSource: DamageSource) {
         LOGGER.info("Villager {} died, message: {}", this as Any, damageSource.getDeathMessage(this).string)
         this.inventory.dropAll()
-        // var entity: Entity? = damageSource.getAttacker()
-        if (!hasVillage()) {
-            VillagerKilledCallback.EVENT.invoker().interact(this)
+        if (hasVillage()) {
+            SettlementManager.leaveSettlement(this)
         }
         super.onDeath(damageSource)
     }
 
     fun canAttack(): Boolean {
-        return this.getProfession()?.type == ProfessionType.GUARD
+        this.getProfession()?.let { profession ->
+            return profession.type == ProfessionType.RECRUIT
+        }
+        return false
+    }
+
+    fun canSleep(): Boolean {
+        return this.world.getTimeOfDay() % 24000.0f / 1000 > 12
     }
 
     // TODO: use better nbt string name convetion
@@ -348,8 +319,8 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
         if (nbt.contains(INVENTORY_KEY, NbtElement.LIST_TYPE.toInt())) {
             this.inventory.readNbt(nbt.getList(INVENTORY_KEY, NbtElement.COMPOUND_TYPE.toInt()))
         }
-        this.setProfession(this, ProfessionType.values()[nbt.getInt("VillagerProfession")])
-        this.state.set(State.values()[nbt.getInt("VillagerState")])
+        LOGGER.info("READING THIS INSTEAD")
+        this.setProfession(ProfessionType.values()[nbt.getInt("VillagerProfession")])
         this.villageKey = nbt.getInt("VillageKey")
         this.key = nbt.getInt("Key")
     }
@@ -358,18 +329,29 @@ class CustomVillagerEntity(entityType: EntityType<out CustomVillagerEntity>, wor
         super.writeCustomDataToNbt(nbt)
         nbt.put(INVENTORY_KEY, this.inventory.writeNbt())
         nbt.putInt("VillagerProfession", this.profession.type.ordinal)
-        nbt.putInt("VillagerState", this.state.get().ordinal)
         nbt.putInt("VillageKey", this.villageKey)
         nbt.putInt("Key", this.key)
     }
 
-    // fun encodeTrait(traits: Array<Float>): NbtList {
-    //  val nbtList = NbtList()
-    //  val data = NbtCompound()
-    //  data.putFloat("dexterity", this.traits.values[0])
-    //  data.putFloat("endurance", this.traits.values[1])
-    //  data.putFloat("agility", this.traits.values[2])
-    //  nbtList.add(data)
-    //  return nbtList
-    // }
+    companion object {
+        const val INVENTORY_KEY = "Inventory"
+        const val VILLAGER_PROFESSION = "VillagerProfession"
+
+        val CHARGING: TrackedData<Boolean> =
+            DataTracker.registerData(
+                CustomVillagerEntity::class.java,
+                TrackedDataHandlerRegistry.BOOLEAN,
+            )
+
+        val SITTING_DIMENSIONS: EntityDimensions = EntityDimensions.fixed(0.6f, 1.35f)
+        val STANDING_DIMENSIONS: EntityDimensions = EntityDimensions.fixed(0.6f, 1.95f)
+
+        fun createCustomVillagerAttributes(): DefaultAttributeContainer.Builder {
+            return PathAwareEntity.createMobAttributes()
+                .add(EntityAttributes.GENERIC_MAX_HEALTH, 20.0)
+                .add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 0.5)
+                .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.25)
+                .add(EntityAttributes.GENERIC_ARMOR, 0.0)
+        }
+    }
 }

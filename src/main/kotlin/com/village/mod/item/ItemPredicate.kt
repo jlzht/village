@@ -2,24 +2,33 @@ package com.village.mod.item
 
 import net.minecraft.enchantment.EnchantmentHelper
 import net.minecraft.item.ArmorItem
+import net.minecraft.item.ArrowItem
 import net.minecraft.item.BowItem
 import net.minecraft.item.CrossbowItem
+import net.minecraft.item.FishingRodItem
 import net.minecraft.item.HoeItem
 import net.minecraft.item.Item
 import net.minecraft.item.ItemStack
+import net.minecraft.item.PickaxeItem
 import net.minecraft.item.RangedWeaponItem
+import net.minecraft.item.ShovelItem
 import net.minecraft.item.SwordItem
-import net.minecraft.item.ArrowItem
+import net.minecraft.registry.tag.ItemTags
 
 object ItemPredicate {
     val HOE: (Item) -> Boolean = { item -> item is HoeItem }
     val BOW: (Item) -> Boolean = { item -> item is BowItem }
     val ARROW: (Item) -> Boolean = { item -> item is ArrowItem }
     val SWORD: (Item) -> Boolean = { item -> item is SwordItem }
+    val PICKAXE: (Item) -> Boolean = { item -> item is PickaxeItem }
+    val SHOVEL: (Item) -> Boolean = { item -> item is ShovelItem }
+    val FISHING_ROD: (Item) -> Boolean = { item -> item is FishingRodItem }
     val ARMOR: (Item) -> Boolean = { item -> item is ArmorItem }
     val CROSSBOW: (Item) -> Boolean = { item -> item is CrossbowItem }
     val WEAPON: (Item) -> Boolean = { item -> item is ArmorItem || item is SwordItem || item is BowItem || item is CrossbowItem || item is ArrowItem }
     val RANGED_WEAPON: (Item) -> Boolean = { item -> item is RangedWeaponItem }
+    val PLANTABLE: (Item) -> Boolean = { item -> item.defaultStack.isIn(ItemTags.VILLAGER_PLANTABLE_SEEDS) }
+    val EDIBLE: (Item) -> Boolean = { item -> item.isFood() }
 
     fun prefersNewEquipment(newStack: ItemStack, oldStack: ItemStack): Boolean {
         if (oldStack.isEmpty) return true

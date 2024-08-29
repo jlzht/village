@@ -2,6 +2,7 @@ package com.village.mod.client.render.entity
 
 import com.village.mod.entity.projectile.SimpleFishingBobberEntity
 import com.village.mod.entity.village.CustomVillagerEntity
+import com.village.mod.LOGGER
 import net.fabricmc.api.EnvType
 import net.fabricmc.api.Environment
 import net.minecraft.client.render.OverlayTexture
@@ -21,7 +22,6 @@ import net.minecraft.util.math.RotationAxis
 import org.joml.Matrix3f
 import org.joml.Matrix4f
 
-// IDEA: just  inherit FishingBobberEntityRenderer
 @Environment(EnvType.CLIENT)
 class SimpleFishingBobberEntityRenderer(context: EntityRendererFactory.Context) : EntityRenderer<SimpleFishingBobberEntity>(context) {
     companion object {
@@ -30,12 +30,14 @@ class SimpleFishingBobberEntityRenderer(context: EntityRendererFactory.Context) 
     }
 
     override fun render(simpleFishingBobberEntity: SimpleFishingBobberEntity, f: Float, g: Float, matrixStack: MatrixStack, vertexConsumerProvider: VertexConsumerProvider, i: Int) {
-        val entity: Entity? = simpleFishingBobberEntity.getOwner()
+        LOGGER.info("LOOK UP")
+        val entity = simpleFishingBobberEntity.getOwner()
         if (entity == null) {
+            LOGGER.info("NO OWNER")
             return
         }
         entity as CustomVillagerEntity
-        matrixStack.push()
+        //matrixStack.push() <- fix crash on this
         matrixStack.push()
         matrixStack.scale(0.5f, 0.5f, 0.5f)
         matrixStack.multiply(dispatcher.rotation)

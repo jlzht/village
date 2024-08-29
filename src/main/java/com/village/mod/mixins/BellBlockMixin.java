@@ -23,8 +23,6 @@ import org.slf4j.Logger;
 
 @Mixin(BellBlock.class)
 public abstract class BellBlockMixin {
-
-  // public final Logger dd = LoggerFactory.getLogger("village");
   @Inject(method = "ring", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/PlayerEntity;incrementStat(Lnet/minecraft/util/Identifier;)V", shift = At.Shift.AFTER), cancellable = true) 
   public void ring(World world, BlockState state, BlockHitResult hitResult, @Nullable PlayerEntity player, boolean checkHitPos, CallbackInfoReturnable<Boolean> cir) {
       if (player != null) {  

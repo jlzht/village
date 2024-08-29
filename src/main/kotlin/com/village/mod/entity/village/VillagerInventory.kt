@@ -1,6 +1,7 @@
 package com.village.mod.entity.village
 
 import com.google.common.collect.ImmutableList
+import net.minecraft.util.Hand
 import com.village.mod.LOGGER
 import com.village.mod.item.ItemPredicate
 import net.minecraft.entity.EquipmentSlot
@@ -51,13 +52,13 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
     }
 
     fun pickUpItem(item: ItemEntity) {
-        // bundle and pouche
         val itemStack = item.stack
         if (villager.canGather(itemStack)) {
             val canInsert = this.canInsert(itemStack)
             if (!canInsert) return
             villager.triggerItemPickedUpByEntityCriteria(item)
             val originalCount = itemStack.count
+            // Horrable
             val remainingStack = if (ItemPredicate.ARROW(item.stack.item)) { this.specialItemHandle(itemStack) } else { this.addStack(main, itemStack) }
             villager.sendPickup(item, originalCount - remainingStack.count)
             if (remainingStack.isEmpty) {
@@ -71,7 +72,7 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
         }
     }
 
-    // FIXME: revist this
+    // TODO: revist this
     fun specialItemHandle(itemStack: ItemStack): ItemStack {
         LOGGER.info("GOT HERE!")
         val kk = itemStack.copy()
@@ -102,7 +103,7 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
             this.villager.dropStack(itemStack)
         }
     }
-    // override tryEqup instead of declaring this here
+
     fun tryEquipArmor() {
         val itemTaken = this.takeItem(ItemPredicate.ARMOR)
         if (itemTaken != ItemStack.EMPTY) {
@@ -132,6 +133,24 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
             }
         }
         return ItemStack.EMPTY
+    }
+
+    fun tryEquip(predicate: (Item) -> Boolean, slot: EquipmentSlot): Boolean {
+        val equipped = villager.getStackInHand(Hand.MAIN_HAND)
+        if (predicate(equipped.getItem())) {
+            return true
+        }
+        val item = villager.inventory.takeItem(predicate)
+        if (item != ItemStack.EMPTY) {
+            villager.inventory.tryInsert(equipped)
+            villager.equipStack(slot, item)
+            return true
+        }
+        return false
+    }
+
+    fun hasItem(predicate: (Item) -> Boolean): Boolean {
+        return findItem(predicate) != -1
     }
 
     fun findItem(predicate: (Item) -> Boolean): Int {
@@ -181,7 +200,7 @@ class VillagerInventory(val villager: CustomVillagerEntity) : Inventory {
         for (k in 0 until field.size) {
             val itemStack = this.getStack(k)
             if (!ItemStack.canCombine(itemStack, stack)) continue
-            //this.transfer(itemStack, stack)
+            // this.transfer(itemStack, stack)
             val i = Math.min(this.getMaxCountPerStack(), itemStack.getMaxCount())
             val j = Math.min(stack.getCount(), i - itemStack.getCount())
             if (j > 0) {

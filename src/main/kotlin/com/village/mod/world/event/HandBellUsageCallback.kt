@@ -4,7 +4,6 @@ import net.fabricmc.fabric.api.event.EventFactory
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.util.ActionResult
 import net.minecraft.util.math.BlockPos
-import net.minecraft.world.World
 
 fun interface HandBellUsageCallback {
     companion object {

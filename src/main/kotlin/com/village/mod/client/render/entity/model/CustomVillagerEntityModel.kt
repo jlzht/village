@@ -1,7 +1,6 @@
 package com.village.mod.client.render.entity.model
 
 import com.village.mod.entity.village.CustomVillagerEntity
-import com.village.mod.village.villager.State
 import net.fabricmc.api.EnvType
 import net.fabricmc.api.Environment
 import net.minecraft.client.model.Dilation
@@ -12,15 +11,13 @@ import net.minecraft.client.model.ModelTransform
 import net.minecraft.client.model.TexturedModelData
 import net.minecraft.client.render.VertexConsumer
 import net.minecraft.client.render.entity.model.BipedEntityModel
-import net.minecraft.client.render.entity.model.CrossbowPosing
 import net.minecraft.client.util.math.MatrixStack
-import net.minecraft.item.Items
 import net.minecraft.util.Arm
-import net.minecraft.util.math.MathHelper
+import net.minecraft.util.Hand
 
 @Environment(EnvType.CLIENT)
 class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<CustomVillagerEntity>(root) {
-    private var sittingOffset = false
+    private var sitOffset = false
 
     companion object {
         fun getTexturedModelData(): TexturedModelData {
@@ -106,15 +103,8 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
     }
 
     override fun setAngles(entity: CustomVillagerEntity, f: Float, g: Float, h: Float, i: Float, j: Float) {
-        this.hat.visible = false
-        this.head.yaw = i * ((Math.PI / 180).toFloat())
-        this.head.pitch = j * ((Math.PI / 180).toFloat())
-        this.body.yaw = 0.0f
-        this.rightArm.pivotZ = 0.0f
-        this.rightArm.pivotX = -5.0f
-        this.leftArm.pivotZ = 0.0f
-        this.leftArm.pivotX = 5.0f
-        if (entity.state.isAt(State.SIT)) {
+        hat.visible = false
+        if (entity.isSitting()) {
             rightArm.pitch = -0.62831855f
             rightArm.yaw = 0.0f
             rightArm.roll = 0.0f
@@ -127,77 +117,19 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
             leftLeg.pitch = -1.4137167f
             leftLeg.yaw = -0.31415927f
             leftLeg.roll = -0.07853982f
-            this.sittingOffset = true
-        } else {
-            rightArm.pitch = MathHelper.cos(f * 0.6662f + Math.PI.toFloat()) * 2.0f * g * 0.5f
-            rightArm.yaw = 0.0f
-            rightArm.roll = 0.0f
-            leftArm.pitch = MathHelper.cos(f * 0.6662f) * 2.0f * g * 0.5f
-            leftArm.yaw = 0.0f
-            leftArm.roll = 0.0f
-            rightLeg.pitch = MathHelper.cos(f * 0.6662f) * 1.4f * g * 0.5f
-            rightLeg.yaw = 0.0f
-            rightLeg.roll = 0.0f
-            leftLeg.pitch = MathHelper.cos(f * 0.6662f + Math.PI.toFloat()) * 1.4f * g * 0.5f
-            leftLeg.yaw = 0.0f
-            leftLeg.roll = 0.0f
-            this.sittingOffset = false
+            sitOffset = true
         }
+        super.setAngles(entity, f, g, h, i, j)
 
-        if (entity.isHoldingTool()) {
+        if (!entity.getStackInHand(Hand.MAIN_HAND).isEmpty()) {
             this.rightArm.pitch = this.rightArm.pitch * 0.5f - 0.31415927f
             this.rightArm.yaw = 0.0f
         }
 
-        if (entity.isAttacking()) {
-            if (entity.isHolding(Items.BOW)) {
-                this.rightArm.yaw = -0.1f + this.head.yaw
-                this.rightArm.pitch = -1.5707964f + this.head.pitch
-                this.leftArm.pitch = -0.9424779f + this.head.pitch
-                this.leftArm.yaw = this.head.yaw - 0.4f
-                this.leftArm.roll = 1.5707964f
-            } else if (entity.isHolding(Items.CROSSBOW)) {
-                if (entity.isCharging()) {
-                    CrossbowPosing.charge(this.rightArm, this.leftArm, entity, true)
-                } else {
-                    CrossbowPosing.hold(this.rightArm, this.leftArm, this.head, true)
-                }
-            }
+        if (!entity.getStackInHand(Hand.OFF_HAND).isEmpty()) {
+            this.leftArm.pitch = this.leftArm.pitch * 0.5f - 0.31415927f
+            this.leftArm.yaw = 0.0f
         }
-        this.animateArms(entity)
-    }
-
-    private fun getPreferredArm(entity: CustomVillagerEntity): Arm {
-        return entity.getMainArm()
-    }
-
-    protected fun animateArms(entity: CustomVillagerEntity) {
-        if (this.handSwingProgress <= 0.0f) {
-            return
-        }
-        val arm = getPreferredArm(entity)
-        val modelPart = getArm(entity.getMainArm())
-        var f = this.handSwingProgress
-        this.body.yaw = MathHelper.sin(MathHelper.sqrt(f) * (Math.PI.toFloat() * 2)) * 0.2f
-        if (arm == Arm.LEFT) {
-            this.body.yaw *= -1.0f
-        }
-        this.rightArm.pivotZ = MathHelper.sin(this.body.yaw) * 5.0f
-        this.rightArm.pivotX = -MathHelper.cos(this.body.yaw) * 5.0f
-        this.leftArm.pivotZ = -MathHelper.sin(this.body.yaw) * 5.0f
-        this.leftArm.pivotX = MathHelper.cos(this.body.yaw) * 5.0f
-        this.rightArm.yaw += this.body.yaw
-        this.leftArm.yaw += this.body.yaw
-        this.leftArm.pitch += this.body.yaw
-        f = 1.0f - this.handSwingProgress
-        f *= f
-        f *= f
-        f = 1.0f - f
-        val g = MathHelper.sin(f * Math.PI.toFloat())
-        val h = (MathHelper.sin(this.handSwingProgress * Math.PI.toFloat()) * -(this.head.pitch - 0.7f) * 0.75f)
-        modelPart.pitch -= g * 1.2f + h
-        modelPart.yaw += this.body.yaw * 2.0f
-        modelPart.roll += MathHelper.sin(this.handSwingProgress * Math.PI.toFloat()) * -0.4f
     }
 
     override fun render(
@@ -210,7 +142,7 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
         b: Float,
         a: Float,
     ) {
-        if (sittingOffset) {
+        if (sitOffset) {
             matrices.translate(0.0, 0.6, 0.0)
         }
         super.render(matrices, vertices, light, overlay, r, g, b, a)

@@ -68,6 +68,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     override fun setOwner(entity: Entity?) {
         super.setOwner(entity)
     }
+
     private fun setRodOwner(rod: SimpleFishingBobberEntity?) {
         val entity: CustomVillagerEntity? = (this.getOwner() as CustomVillagerEntity)
         if (entity != null && entity.getProfession() != null) {
@@ -82,7 +83,6 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     }
 
     public fun pullBack() {
-        (owner as CustomVillagerEntity).setActing(false)
         remove(RemovalReason.DISCARDED)
     }
 
@@ -105,7 +105,6 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
         if (isOnGround) {
             removalTimer++
             if (removalTimer >= 50) {
-                LOGGER.info("TRIGGER REMOVAL TIMEOUT")
                 this.pullBack()
                 return
             }
@@ -193,10 +192,7 @@ class SimpleFishingBobberEntity(type: EntityType<out SimpleFishingBobberEntity>,
     }
 
     override fun remove(reason: Entity.RemovalReason?) {
-        val ent = this.getOwner()
-        if (ent != null) {
-            this.setRodOwner(null)
-        }
+        this.setRodOwner(null)
         super.remove(reason)
     }
 

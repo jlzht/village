@@ -10,7 +10,7 @@ object Utils {
         return Iterable {
             object : AbstractIterator<BlockPos>() {
                 private var angle = 0.0
-                private val angleIncrement = 360.0 / (8 * radius)
+                private val angleIncrement = 360.0 / (30 * radius)
 
                 override fun computeNext() {
                     if (angle >= 360) {
@@ -19,10 +19,8 @@ object Utils {
                     }
                     val xOffset = (Math.cos(Math.toRadians(angle)) * radius).roundToInt()
                     val zOffset = (Math.sin(Math.toRadians(angle)) * radius).roundToInt()
-                    // val blockPos =
                     setNext(center.add(xOffset, 0, zOffset))
                     angle += angleIncrement
-                    // return blockPos
                 }
             }
         }

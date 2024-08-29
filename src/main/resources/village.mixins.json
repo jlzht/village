@@ -6,7 +6,8 @@
     "MinecraftServerMixin",
     "ZombieEntityMixin",
     "DrownedEntityMixin",
-    "BellBlockMixin"
+    "BellBlockMixin",
+    "ServerWorldMixin"
   ],
 	"injectors": {
 		"defaultRequire": 1

@@ -2,22 +2,11 @@ package com.village.mod.village.profession
 
 enum class ProfessionType {
     NONE,
+    GATHERER,
+    HUNTER,
     FARMER,
     FISHERMAN,
+    RECRUIT,
     MERCHANT,
     GUARD,
 }
-
-// MASON
-// ARTISAN
-// FLETCHER
-// CLERIC
-// DEFENDER
-// ARCHER
-// GATHERER
-// MINER
-// SOURCERER
-// WITCH
-// SHEPHERD
-
-//

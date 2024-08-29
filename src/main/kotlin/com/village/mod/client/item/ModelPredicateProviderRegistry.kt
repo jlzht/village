@@ -1,10 +1,10 @@
 package com.village.mod.client.item
 
-// import com.village.mod.entity.village.VillagerEntity
 import net.minecraft.client.item.ModelPredicateProviderRegistry
 import net.minecraft.item.Items
 import net.minecraft.util.Identifier
 
+// TODO: make a injection in registerModelPredicateProviders for FISHING_ROD having cast animation on villager hands
 object VillageModelPredicateProviders {
     fun registerModelPredicateProviders() {
         //ModelPredicateProviderRegistry.register(
