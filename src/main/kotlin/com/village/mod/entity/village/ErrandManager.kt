@@ -8,14 +8,20 @@ import java.util.PriorityQueue
 
 class ErrandManager(
     private val entity: CustomVillagerEntity,
-    private var homeErrands: (Int) -> List<Errand>?,
-    private var workErrands: (Int) -> List<Errand>?,
-    private val calculatePriority: (Errand) -> Double,
+    private var homeErrands: ((Int) -> List<Errand>?)? = null,
+    private var workErrands: ((Int) -> List<Errand>?)? = null,
 ) {
+    private fun calculatePriority(errand: Errand): Double =
+        errand.let { (cid, p) ->
+            Action.get(cid).scan(entity, p).toDouble()
+        }
 
-    private val errandComparator = Comparator<Errand> { e1, e2 ->
-        calculatePriority(e1).compareTo(calculatePriority(e2))
-    }
+    private val errandComparator =
+        Comparator<Errand> { e1, e2 ->
+            val v = calculatePriority(e1)
+            val u = calculatePriority(e2)
+            u.compareTo(v)
+        }
 
     private val queue = PriorityQueue(errandComparator)
 
@@ -29,14 +35,22 @@ class ErrandManager(
         return queue.peek()
     }
 
+    fun has(type: Action.Type): Boolean = queue.any { it.cid == type }
+
     fun pop(): Errand {
         val e = queue.poll()
         LOGGER.info("THIS ERRAND WAS POPPED: {}", e)
         return e
     }
 
-    fun add(action: Action.Type, pos: BlockPos): Boolean {
-        val errand = Errand(action, pos)
+    fun add(
+        action: Action.Type,
+        pos: BlockPos?,
+    ): Boolean = add(Errand(action, pos))
+
+    fun add(action: Action.Type): Boolean = add(action, null)
+
+    fun add(errand: Errand): Boolean {
         if (calculatePriority(errand) > 0.0) {
             LOGGER.info("Added errand: {}", errand)
             queue.add(errand)
@@ -48,15 +62,19 @@ class ErrandManager(
 
     private fun updatePriorityQueue() {
         val combinedErrands = mutableListOf<Errand>()
-        val home = homeErrands(entity.key)
-        if (home != null) {
-            LOGGER.info("Home: {}", home.iterator())
-            combinedErrands.addAll(home)
+        homeErrands?.let { errands ->
+            val list = errands.invoke(entity.data.key)
+            LOGGER.info(">>>> {}", list)
+            list?.let {
+                combinedErrands.addAll(list)
+            }
         }
-        val work = workErrands(entity.key)
-        if (work != null) {
-            LOGGER.info("Work: {}", work.iterator())
-            combinedErrands.addAll(work)
+        workErrands?.let { errands ->
+            val list = errands.invoke(entity.data.key)
+            LOGGER.info(">>>> {}", list)
+            list?.let {
+                combinedErrands.addAll(list)
+            }
         }
         LOGGER.info("|> Combined Errands: {}", combinedErrands)
         val filteredErrands = combinedErrands.filter { calculatePriority(it) > 0.0 }
@@ -74,7 +92,11 @@ class ErrandManager(
         printQueue()
     }
 
-    fun assignStructure(id: Int, errands: (Int) -> List<Errand>?, isHouse: Boolean) {
+    fun assignStructure(
+        id: Int,
+        errands: ((Int) -> List<Errand>?)?,
+        isHouse: Boolean,
+    ) {
         if (isHouse) {
             homeErrands = errands
             homeID = id
@@ -84,19 +106,11 @@ class ErrandManager(
         }
     }
 
-    fun hasHome(): Boolean {
-        return homeErrands(entity.key) != null
-    }
+    fun hasHome(): Boolean = homeErrands != null
 
-    fun hasWork(): Boolean {
-        return workErrands(entity.key) != null
-    }
+    fun hasWork(): Boolean = workErrands != null
 
-    fun hasErrand(errand: Errand): Boolean {
-        return queue.contains(errand)
-    }
+    fun hasErrand(errand: Errand): Boolean = queue.contains(errand)
 
-    fun hasErrands(): Boolean {
-        return !queue.isEmpty()
-    }
+    fun hasErrands(): Boolean = !queue.isEmpty()
 }

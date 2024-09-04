@@ -1,60 +1,67 @@
 package com.village.mod.action
 
 import com.village.mod.LOGGER
+import com.village.mod.util.BlockIterator
 import com.village.mod.entity.projectile.SimpleFishingBobberEntity
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.item.ItemPredicate
+import com.village.mod.utils.CombatUtils
+import com.village.mod.util.Finder
 import com.village.mod.village.profession.Fisherman
 import net.minecraft.block.Block
 import net.minecraft.block.Blocks
 import net.minecraft.block.CropBlock
+import net.minecraft.block.DoorBlock
 import net.minecraft.block.FarmlandBlock
 import net.minecraft.block.PlantBlock
 import net.minecraft.block.SlabBlock
-import net.minecraft.enchantment.EnchantmentHelper
-import net.minecraft.enchantment.Enchantments
 import net.minecraft.entity.EquipmentSlot
-import net.minecraft.entity.LivingEntity
-import net.minecraft.entity.projectile.PersistentProjectileEntity
-import net.minecraft.entity.projectile.ProjectileEntity
-import net.minecraft.entity.projectile.ProjectileUtil
 import net.minecraft.item.BoneMealItem
 import net.minecraft.item.CrossbowItem
 import net.minecraft.item.Items
-import net.minecraft.sound.SoundEvents
 import net.minecraft.util.Hand
 import net.minecraft.util.math.BlockPos
-import net.minecraft.util.math.Vec3d
-import org.joml.Vector3f
 
-data class Errand(val cid: Action.Type, val pos: BlockPos) // make pos nullable
+data class Errand(
+    val cid: Action.Type,
+    val pos: BlockPos?,
+)
 
 typealias Input = (entity: CustomVillagerEntity, pos: BlockPos?) -> Byte
 
 sealed class Action {
-    abstract val scan: Input // scan if errand can be picked
-    abstract val test: Input // verify if errand can be executed
-    abstract val exec: Input // execute lambda representing errand
-    abstract val eval: Input // scan if errand can me end
+    abstract val scan: Input // scan if errand can be picked,
+    open val test: Input = { _, _ -> 1 } // verify if errand can be executed
+    open val exec: Input = { _, _ -> 1 } // execute lambda representing errand
+    open val eval: Input = { _, _ -> 1 } // scan if errand can me end
+    open val redo: Input = { _, _ -> 1 } // check if action must be redone
+
     open val ticksToTest: Int = 5
     open val ticksToExec: Int = 5
-    open val radiusToAct: Float = 4.0f // defines the proximity the entity needs to be to test and exec
-    open val radiusToLook: Float = 4.0f // defines the proximity the entity needs to start looking at the target
+    open val radiusToAct: Float = 4.0f
+    open val radiusToLook: Float = 4.0f
     open val speedModifier: Double = 1.0
-    open val shouldMoveTowards: (Double) -> Boolean = { d -> d > radiusToAct }
-    val shouldLookAt: (Double) -> Boolean = { d -> d < radiusToLook }
 
-    object Explore : Action() {
-        override val scan: Input = { e, p -> 1 }
-        override val test: Input = { _, _ -> 0 }
-        override val exec: Input = { _, _ -> 1 }
-        override val eval: Input = { e, p -> 0 }
+    val shouldTest: (Int) -> Boolean = { c -> c >= ticksToTest }
+    val shouldExec: (Int) -> Boolean = { c -> c >= ticksToExec }
+    val shouldMove: (Double) -> Boolean = { d -> d > radiusToAct }
+    val shouldLook: (Double) -> Boolean = { d -> d < radiusToLook }
+
+    object Pick : Action() {
+        override val scan: Input = { _, _ -> 3 }
+        override val radiusToAct: Float = 2.0f
+        override val radiusToLook: Float = 5.0f
+        override val ticksToTest: Int = 1
+        override val ticksToExec: Int = 1
     }
 
     object Sleep : Action() {
         override val scan: Input = { e, _ -> e.canSleep().toByte() }
         override val test: Input = { e, _ -> e.canSleep().toByte() }
-        override val exec: Input = { e, p -> e.sleep(p!!); 1 }
+        override val exec: Input = { e, p ->
+            e.sleep(p!!)
+            1
+        }
         override val eval: Input = { e, _ -> (!e.canSleep()).toByte() }
     }
 
@@ -66,7 +73,7 @@ sealed class Action {
             (
                 e.world.getBlockState(p!!.down()).block in TILLABLE_BLOCKS &&
                     e.inventory.tryEquip(ItemPredicate.HOE, EquipmentSlot.MAINHAND)
-                ).toByte()
+            ).toByte()
         }
         override val exec: Input = { e, p ->
             val stack = e.getStackInHand(Hand.MAIN_HAND)
@@ -75,10 +82,18 @@ sealed class Action {
             stack.damage(1, e, { j -> j.sendToolBreakStatus(Hand.MAIN_HAND) })
             1
         }
-        override val eval: Input = { _, _ -> 1 }
     }
 
     object Plant : Action() {
+        override val scan: Input = { e, _ -> e.inventory.hasItem(ItemPredicate.PLANTABLE).toByte(5) }
+        override val test: Input = { e, p ->
+            (
+                e.world.getBlockState(p!!.up()).isAir &&
+                    e.world.getBlockState(p).block is FarmlandBlock &&
+                    e.inventory.tryEquip(ItemPredicate.PLANTABLE, EquipmentSlot.MAINHAND)
+            ).toByte()
+        }
+
         override val exec: Input = { e, p ->
             val stack = e.getStackInHand(Hand.MAIN_HAND)
             when (stack.item) {
@@ -94,39 +109,31 @@ sealed class Action {
             }
             1
         }
-        override val test: Input = { e, p ->
-            (
-                e.world.getBlockState(p!!.up()).isAir &&
-                    e.world.getBlockState(p).block is FarmlandBlock &&
-                    e.inventory.tryEquip(ItemPredicate.PLANTABLE, EquipmentSlot.MAINHAND)
-                ).toByte()
-        }
-        override val eval: Input = { _, _ -> 1 }
-        override val scan: Input = { e, _ -> e.inventory.hasItem(ItemPredicate.PLANTABLE).toByte(5) }
     }
 
     object Powder : Action() {
-        override val exec: Input = { e, p ->
-            val stack = e.getStackInHand(Hand.MAIN_HAND)
-            LOGGER.info("BONED")
-            BoneMealItem.useOnFertilizable(e.getStackInHand(Hand.MAIN_HAND), e.world, p!!.up())
-            e.swingHand(Hand.MAIN_HAND)
-            stack.decrement(1)
-            1
+        override val scan: Input = { e, _ ->
+            e.inventory.hasItem({ item -> item == Items.BONE_MEAL }).toByte(5)
         }
+
         override val test: Input = { e, p ->
             p?.let {
                 val state = e.world.getBlockState(it.up())
                 (
-                    state.block is CropBlock && !(state.block as CropBlock).isMature(state) &&
+                    state.block is CropBlock &&
+                        !(state.block as CropBlock).isMature(state) &&
                         e.world.getBlockState(it).block is FarmlandBlock &&
                         e.inventory.tryEquip({ item -> item == Items.BONE_MEAL }, EquipmentSlot.MAINHAND)
-                    ).toByte()
+                ).toByte()
             } ?: 0
         }
-        override val eval: Input = { _, _ -> 1 }
-        override val scan: Input = { e, _ ->
-            e.inventory.hasItem({ item -> item == Items.BONE_MEAL }).toByte(5)
+
+        override val exec: Input = { e, p ->
+            val stack = e.getStackInHand(Hand.MAIN_HAND)
+            BoneMealItem.useOnFertilizable(e.getStackInHand(Hand.MAIN_HAND), e.world, p!!.up())
+            e.swingHand(Hand.MAIN_HAND)
+            stack.decrement(1)
+            1
         }
     }
 
@@ -140,24 +147,26 @@ sealed class Action {
             entity.swingHand(Hand.MAIN_HAND)
             1
         }
-        override val eval: Input = { _, _ -> 1 }
     }
 
     object Break : Action() {
+        override val scan: Input = { _, _ -> 2 }
+        override val test: Input = { e, p ->
+            val block = e.world.getBlockState(p).block
+            (block is CropBlock || block is PlantBlock).toByte()
+        }
         override val exec: Input = { e, p ->
             e.world.breakBlock(p!!, true)
             e.swingHand(Hand.MAIN_HAND)
             1
         }
-        override val test: Input = { e, p ->
-            val block = e.world.getBlockState(p).block
-            (block is CropBlock || block is PlantBlock).toByte()
-        }
-        override val eval: Input = { _, _ -> 1 }
-        override val scan: Input = { _, _ -> 2 }
     }
 
     object Dig : Action() {
+        override val scan: Input = { e, _ -> e.inventory.hasItem(ItemPredicate.SHOVEL).toByte(5) }
+        override val test: Input = { e, p ->
+            (e.world.getBlockState(p).block == Blocks.DIRT).toByte()
+        }
         override val exec: Input = { e, p ->
             if (e.world.getBlockState(p).block == Blocks.DIRT) {
                 e.world.breakBlock(p, true)
@@ -165,27 +174,32 @@ sealed class Action {
             }
             0
         }
-        override val test: Input = { e, p ->
-            (e.world.getBlockState(p).block == Blocks.DIRT).toByte()
-        }
-        override val eval: Input = { _, _ -> 1 }
-        override val scan: Input = { e, _ -> e.inventory.hasItem(ItemPredicate.SHOVEL).toByte(5) }
     }
 
     object Mine : Action() {
+        override val scan: Input = { e, _ -> e.inventory.hasItem(ItemPredicate.PICKAXE).toByte(5) }
+        override val test: Input = { e, p ->
+            (e.world.getBlockState(p).block == Blocks.STONE).toByte()
+        }
         override val exec: Input = { e, p ->
             e.world.breakBlock(p, true)
             e.swingHand(Hand.MAIN_HAND)
             0
         }
-        override val test: Input = { e, p ->
-            (e.world.getBlockState(p).block == Blocks.STONE).toByte()
-        }
-        override val eval: Input = { _, _ -> 1 }
-        override val scan: Input = { e, _ -> e.inventory.hasItem(ItemPredicate.PICKAXE).toByte(5) }
     }
 
     object Fish : Action() {
+        override val scan: Input = { e, _ -> (e.inventory.hasItem(ItemPredicate.FISHING_ROD)).toByte(4) }
+
+        override val test: Input = { e, p ->
+            val fisherman = (e.getProfession() as Fisherman)
+            (
+                BlockIterator.NEIGHBOURS(p!!).all { e.world.getBlockState(p).block == Blocks.WATER } &&
+                    fisherman.getFishHook() == null &&
+                    e.inventory.tryEquip(ItemPredicate.FISHING_ROD, EquipmentSlot.MAINHAND)
+            ).toByte()
+        }
+
         override val exec: Input = { e, _ ->
             // TODO: calculate velocity and angle to throw fishing bobber as pos
             e.world.spawnEntity(SimpleFishingBobberEntity(e, e.world, 0, 0))
@@ -193,56 +207,67 @@ sealed class Action {
             0
         }
 
-        override val test: Input = { e, p ->
-            val fisherman = (e.getProfession() as Fisherman)
-            (
-                NEIGHBOURS.all { e.world.getBlockState(p!!.add(it)).block == Blocks.WATER } &&
-                    fisherman.getFishHook() == null &&
-                    e.inventory.tryEquip(ItemPredicate.FISHING_ROD, EquipmentSlot.MAINHAND)
-                ).toByte()
-        }
-
         override val eval: Input = { e, _ ->
             // TODO: eval check to make fisherman look at block target
             val fisherman = (e.getProfession() as Fisherman)
             if (fisherman.getFishHook() == null) {
-                e.swingHand(Hand.MAIN_HAND); 1
+                e.swingHand(Hand.MAIN_HAND)
+                1
             } else {
                 0
             }
         }
-
-        override val scan: Input = { e, _ -> (e.inventory.hasItem(ItemPredicate.FISHING_ROD)).toByte(4) }
     }
 
     object Sit : Action() {
-        override val exec: Input = { e, p ->
-            e.sit(p!!)
-            0
-        }
+        override val scan: Input = { _, _ -> 6 }
+
         override val test: Input = { e, p ->
-            (e.world.getBlockState(p).block is SlabBlock).toByte()
+            var ret: Byte = 0
+            if (p != null) {
+                (e.world.getBlockState(p).block is SlabBlock).toByte()
+            } else {
+                ret = 1
+            }
+            ret
         }
-        override val eval: Input = { _, _ -> 0 }
-        override val scan: Input = { _, _ -> 1 }
+
+        override val exec: Input = { e, p ->
+            e.sit(p)
+            1
+        }
+        override val eval: Input = { _, _ -> 1 } // hummm
     }
 
     object Flee : Action() {
-        override val exec: Input = { _, _ -> 1 }
-        override val test: Input = { _, _ -> 1 }
-        override val eval: Input = { _, _ -> 1 }
         override val scan: Input = { _, _ -> 9 }
-        override val radiusToAct: Float = 5.0f
+        override val eval: Input = { e, _ ->
+            var ret: Byte = 0
+            e.target?.let { t ->
+                if (e.squaredDistanceTo(t) > 24 && !t.canSee(e)) {
+                    e.target = null
+                    ret = 1
+                } else {
+                    ret = 2
+                }
+            } ?: run { ret = 1 }
+            ret
+        }
+        override val redo: Input = { e, _ ->
+            e.target?.let { t ->
+                Finder.findFleeBlock(e, t)
+            }
+            1
+        }
+        override val radiusToAct: Float = 4.5f
+        override val radiusToLook: Float = -1.0f
         override val ticksToTest: Int = 1
         override val ticksToExec: Int = 1
-        override val speedModifier: Double = 1.2
+        override val speedModifier: Double = 1.33
     }
 
-    object Reach : Action() {
+    object Move : Action() {
         override val scan: Input = { _, _ -> 8 }
-        override val test: Input = { _, _ -> 1 }
-        override val exec: Input = { _, _ -> 1 }
-        override val eval: Input = { _, _ -> 1 }
         override val radiusToAct: Float = 8.0f
     }
 
@@ -254,122 +279,73 @@ sealed class Action {
         override val test: Input = { e, _ ->
             (e.inventory.tryEquip(ItemPredicate.EDIBLE, EquipmentSlot.OFFHAND)).toByte()
         }
-        override val exec: Input = { e, _ -> e.setCurrentHand(Hand.OFF_HAND); 1 }
-        override val eval: Input = { e, _ -> (!e.isEating()).toByte().also { LOGGER.info("I AM EAT:{}", it) } }
+        override val exec: Input = { e, _ ->
+            e.setCurrentHand(Hand.OFF_HAND)
+            1
+        }
+        override val eval: Input = { e, _ -> ( !e.isEating()).toByte() }
     }
 
     object Store : Action() {
         override val scan: Input = { _, _ -> 9 }
-        override val test: Input = { _, _ -> 1 }
-        override val exec: Input = { _, _ -> 1 }
-        override val eval: Input = { _, _ -> 1 }
+        override val exec: Input = { e, _ ->
+            e.target = null
+            1
+        }
+        override val speedModifier: Double = 1.2
+        override val radiusToLook: Float = -1.0f
     }
 
-    object Shoot : Action() {
-        // has alive target, the target is far enough and have Arrows
+    object Charge : Action() {
         override val scan: Input = { e, _ ->
             (
                 e.inventory.tryEquip(ItemPredicate.CROSSBOW, EquipmentSlot.MAINHAND) &&
                     e.target != null
-                ).toByte(9)
+            ).toByte(9)
         }
         override val test: Input = { e, _ ->
-            var ret: Byte = 0
-            if (!(e.isUsingItem) && e.target != null) {
-                val item = e.getStackInHand(ProjectileUtil.getHandPossiblyHolding(e, Items.CROSSBOW))
-                if (!CrossbowItem.isCharged(item)) {
-                    e.setCurrentHand(ProjectileUtil.getHandPossiblyHolding(e, Items.CROSSBOW))
-                    e.setCharging(true)
-                }
-                ret = 1
+            val item = e.getStackInHand(Hand.MAIN_HAND)
+            if (!CrossbowItem.isCharged(item)) {
+                e.setCurrentHand(Hand.MAIN_HAND)
             }
-            ret
+            1
         }
-        override val exec: Input = { _, _ -> 1 }
+
         override val eval: Input = { e, _ ->
             var ret: Byte = 0
+            val ready = e.getItemUseTime() >= CrossbowItem.getPullTime(e.getActiveItem())
+            val item = e.getStackInHand(Hand.MAIN_HAND)
             e.target?.let { t ->
                 if (t.isAlive) {
-                    if (e.isCharging() && e.getItemUseTime() >= CrossbowItem.getPullTime(e.getActiveItem()) + 10) {
-                        val item = e.getStackInHand(ProjectileUtil.getHandPossiblyHolding(e, Items.CROSSBOW))
-                        CrossbowItem.setCharged(item, true)
-                        e.setCharging(false)
-                    }
-                    if (!e.isCharging()) {
-                        if (e.random.nextInt(10) == 0) {
-                            shoot(e, t, true)
+                    if (e.isUsingItem) {
+                        if (ready) {
                             e.stopUsingItem()
-                            ret = 1
+                            CrossbowItem.setCharged(item, true)
                         }
+                    } else if (e.random.nextInt(5) == 0) {
+                        CombatUtils.shoot(e, t, item, Hand.MAIN_HAND, true)
+                        ret = 1
                     }
                 } else {
-                    if (e.isCharging() && e.getItemUseTime() >= CrossbowItem.getPullTime(e.getActiveItem())) {
-                        val item = e.getStackInHand(ProjectileUtil.getHandPossiblyHolding(e, Items.CROSSBOW))
-                        CrossbowItem.setCharged(item, true)
-                        e.setCharging(false)
+                    if (e.isUsingItem) {
+                        if (ready) {
+                            e.stopUsingItem()
+                            CrossbowItem.setCharged(item, true)
+                            ret = 1
+                        }
+                    } else {
+                        ret = 1
                     }
-                    e.stopUsingItem()
-                    ret = 1
                 }
             } ?: run {
-                if (e.isCharging() && e.getItemUseTime() >= CrossbowItem.getPullTime(e.getActiveItem())) {
-                    val item = e.getStackInHand(ProjectileUtil.getHandPossiblyHolding(e, Items.CROSSBOW))
-                    CrossbowItem.setCharged(item, true)
-                    e.setCharging(false)
-                }
-                e.stopUsingItem()
                 ret = 1
             }
             ret
         }
-        override val ticksToExec: Int = 15
-        override val ticksToTest: Int = 1
-        override val radiusToAct: Float = 25.0f
-        override val radiusToLook: Float = 18.0f
-
-        private fun shoot(entity: CustomVillagerEntity, target: LivingEntity, isCrossbow: Boolean) {
-            val itemStack = if (isCrossbow) {
-                entity.getProjectileType(entity.getStackInHand(ProjectileUtil.getHandPossiblyHolding(entity, Items.CROSSBOW)))
-            } else {
-                entity.getProjectileType(entity.getStackInHand(ProjectileUtil.getHandPossiblyHolding(entity, Items.BOW)))
-            }
-            val projectileEntity: PersistentProjectileEntity = ProjectileUtil.createArrowProjectile(entity, itemStack, 1.0f)
-            if (entity.random.nextFloat() < 0.10f) {
-                projectileEntity.setCritical(true)
-            }
-            if (isCrossbow) {
-                projectileEntity.setSound(SoundEvents.ITEM_CROSSBOW_HIT)
-                projectileEntity.setShotFromCrossbow(true)
-                val i: Byte = EnchantmentHelper.getLevel(Enchantments.PIERCING, itemStack).toByte()
-                if (i > 0) projectileEntity.setPierceLevel(i)
-                val test = entity.getStackInHand(ProjectileUtil.getHandPossiblyHolding(entity, Items.CROSSBOW))
-                CrossbowItem.setCharged(test, false)
-            } else {
-            }
-            this.shootTo(entity, target, projectileEntity, 1.0f, 1.6f)
-            entity.world.spawnEntity(projectileEntity)
-        }
-
-        fun shootTo(entity: CustomVillagerEntity, target: LivingEntity, projectile: ProjectileEntity, multishotSpray: Float, speed: Float) {
-            val d = target.getX() - entity.getX()
-            val e = target.getZ() - entity.getZ()
-            val f = Math.sqrt(d * d + e * e)
-            val g = target.getBodyY(0.3333333333333333) - projectile.getY() + f * 0.2F
-            val vector3f = getProjectileLaunchVelocity(entity, Vec3d(d, g, e), multishotSpray)
-            projectile.setVelocity(vector3f.x().toDouble(), vector3f.y().toDouble(), vector3f.z().toDouble(), speed, 14 - entity.world.difficulty.id * 4.0f)
-            entity.playSound(SoundEvents.ITEM_CROSSBOW_SHOOT, 1.0f, 1.0f / (entity.random.nextFloat() * 0.4f + 0.8f))
-        }
-
-        private fun getProjectileLaunchVelocity(entity: CustomVillagerEntity, positionDelta: Vec3d, multishotSpray: Float): Vector3f {
-            val vector3f = positionDelta.toVector3f().normalize()
-            var vector3f2 = Vector3f(vector3f).cross(Vector3f(0.0f, 0.0f, 1.0f))
-            if (vector3f2.lengthSquared() <= 1.0E-7) {
-                val vec3d = entity.getOppositeRotationVector(1.0f)
-                vector3f2 = Vector3f(vector3f).cross(vec3d.toVector3f())
-            }
-            val vector3f3 = vector3f.rotateAxis(0.0f, vector3f2.x, vector3f2.y, vector3f2.z)
-            return vector3f.rotateAxis((Math.PI.toFloat() / 180), vector3f3.x, vector3f3.y, vector3f3.z)
-        }
+        override val ticksToExec: Int = 10
+        override val ticksToTest: Int = 2
+        override val radiusToAct: Float = 175.0f
+        override val radiusToLook: Float = 175.0f
     }
 
     object Attack : Action() {
@@ -377,30 +353,158 @@ sealed class Action {
             (
                 e.inventory.tryEquip(ItemPredicate.SWORD, EquipmentSlot.MAINHAND) &&
                     e.target != null
-                ).toByte(9)
+            ).toByte(9)
         }
-        override val test: Input = { _, _ -> 1 }
-        override val exec: Input = { _, _ -> 1 }
         override val eval: Input = { e, _ ->
-            var ret: Byte = 0
             e.target?.let { t ->
                 if (t.isAlive) {
                     e.swingHand(Hand.MAIN_HAND)
-                    e.tryAttack(t)
+                    if (e.squaredDistanceTo(t) <= 3.5f) {
+                        e.tryAttack(t)
+                    }
                 }
-                ret = 1
-            } ?: run {
-                ret = 1
             }
-            ret
+            1
         }
         override val speedModifier: Double = 1.2
         override val radiusToAct: Float = 3.5f
         override val radiusToLook: Float = 12.0f
     }
 
+    object Look : Action() {
+        override val scan: Input = { _, _ -> 4 }
+        override val eval: Input = { e, _ ->
+            var ret: Byte = 0
+            if (e.random.nextInt(10) == 0 && e.target != null) {
+                e.target = null
+                ret = 1
+            }
+            ret
+        }
+        override val radiusToAct: Float = 75.0f
+        override val radiusToLook: Float = 75.0f
+        override val ticksToTest: Int = 1
+        override val ticksToExec: Int = 20
+    }
+
+    object Open : Action() {
+        override val scan: Input = { _, _ -> 9 }
+        override val test: Input = { e, p ->
+            (e.world.getBlockState(p).getBlock() is DoorBlock).toByte()
+        }
+        override val exec: Input = { e, p ->
+            val state = e.world.getBlockState(p)
+            (state.getBlock() as DoorBlock).setOpen(e, e.getWorld(), state, p, true)
+            e.swingHand(Hand.MAIN_HAND)
+            1
+        }
+        override val eval: Input = { e, p ->
+            p?.let {
+                val state = e.world.getBlockState(p)
+                val d = state.get(DoorBlock.FACING)
+                val r = e.blockPos.getSquaredDistance(p.offset(d).toCenterPos())
+                val l = e.blockPos.getSquaredDistance(p.offset(d.getOpposite()).toCenterPos())
+                e.getErrandsManager().add(
+                    Action.Type.CLOSE,
+                    if (r > l) {
+                        p.offset(d)
+                    } else {
+                        p.offset(d.getOpposite())
+                    },
+                )
+            }
+            1
+        }
+    }
+
+    object Close : Action() {
+        override val scan: Input = { _, _ -> 9 }
+
+        override val exec: Input = { e, p ->
+            p?.let {
+                BlockIterator.NEIGHBOURS(p).find { e.world.getBlockState(it).getBlock() is DoorBlock }?.let { t ->
+                    val state = e.world.getBlockState(p.add(t))
+                    if (state.getBlock() is DoorBlock) {
+                        (state.getBlock() as DoorBlock).setOpen(e, e.getWorld(), state, p.add(t), false)
+                        e.swingHand(Hand.MAIN_HAND)
+                    }
+                }
+            }
+            1
+        }
+
+        override val radiusToAct: Float = 0.5f
+    }
+
+    object Defend : Action() {
+        override val scan: Input = { e, _ ->
+            (
+                e.inventory.tryEquip(ItemPredicate.SHIELD, EquipmentSlot.OFFHAND) &&
+                    e.target != null
+            ).toByte(10)
+        }
+        override val test: Input = { e, _ ->
+            e.setCurrentHand(Hand.OFF_HAND)
+            1
+        }
+        override val eval: Input = { e, _ ->
+            var ret: Byte = 0
+            e.target?.let { t ->
+                if (e.random.nextInt(20) == 0) {
+                    e.stopUsingItem()
+                    ret = 1
+                }
+                if (!t.isAlive) {
+                    e.stopUsingItem()
+                    ret = 1
+                }
+            } ?: run {
+                e.stopUsingItem()
+                ret = 1
+            }
+            ret
+        }
+    }
+
+    object Aim : Action() {
+        override val scan: Input = { e, _ ->
+            (
+                e.inventory.tryEquip(ItemPredicate.BOW, EquipmentSlot.MAINHAND) &&
+                    e.target != null
+            ).toByte(9)
+        }
+
+        override val test: Input = { e, _ ->
+            e.setCurrentHand(Hand.MAIN_HAND)
+            1
+        }
+
+        override val eval: Input = { e, _ ->
+            var ret: Byte = 0
+            val ready = e.getItemUseTime() >= 25
+            val item = e.getStackInHand(Hand.MAIN_HAND)
+            e.target?.let { t ->
+                if (t.isAlive) {
+                    if (ready && e.random.nextInt(5) == 0) {
+                        CombatUtils.shoot(e, t, item, Hand.MAIN_HAND, false)
+                        e.stopUsingItem()
+                        ret = 1
+                    }
+                }
+            } ?: run {
+                e.stopUsingItem()
+                ret = 1
+            }
+            ret
+        }
+        override val ticksToExec: Int = 15
+        override val ticksToTest: Int = 2
+        override val radiusToAct: Float = 150.0f
+        override val radiusToLook: Float = 150.0f
+    }
+
     enum class Type {
-        EXPLORE,
+        PICK,
         SLEEP,
         TILL,
         PLANT,
@@ -412,39 +516,52 @@ sealed class Action {
         FISH,
         SIT,
         FLEE,
-        REACH,
+        MOVE,
         EAT,
         STORE,
-        SHOOT,
+        CHARGE,
         ATTACK,
+        AIM,
+        LOOK,
+        OPEN,
+        CLOSE,
+        DEFEND,
     }
 
     companion object {
-        private val map = mapOf(
-            Type.EXPLORE to Explore,
-            Type.SLEEP to Sleep,
-            Type.TILL to Till,
-            Type.PLANT to Plant,
-            Type.POWDER to Powder,
-            Type.HARVEST to Harvest,
-            Type.BREAK to Break,
-            Type.DIG to Dig,
-            Type.MINE to Mine,
-            Type.FISH to Fish,
-            Type.SIT to Sit,
-            Type.FLEE to Flee,
-            Type.REACH to Reach,
-            Type.EAT to Eat,
-            Type.STORE to Store,
-            Type.SHOOT to Shoot,
-            Type.ATTACK to Attack,
-        )
+        private val map =
+            mapOf(
+                Type.PICK to Pick,
+                Type.SLEEP to Sleep,
+                Type.TILL to Till,
+                Type.PLANT to Plant,
+                Type.POWDER to Powder,
+                Type.HARVEST to Harvest,
+                Type.BREAK to Break,
+                Type.DIG to Dig,
+                Type.MINE to Mine,
+                Type.FISH to Fish,
+                Type.SIT to Sit,
+                Type.FLEE to Flee,
+                Type.MOVE to Move,
+                Type.EAT to Eat,
+                Type.STORE to Store,
+                Type.CHARGE to Charge,
+                Type.ATTACK to Attack,
+                Type.LOOK to Look,
+                Type.OPEN to Open,
+                Type.CLOSE to Close,
+                Type.DEFEND to Defend,
+                Type.AIM to Aim,
+            )
 
-        fun get(type: Type): Action = map[type] ?: Explore
+        fun get(type: Type): Action = map[type] ?: Pick
+
         // TODO: puts these on a general utils object
         fun Boolean.toByte(mult: Int): Byte = if (this) (1 * mult).toByte() else 0
+
         fun Boolean.toByte(): Byte = if (this) 1 else 0
-        private val NEIGHBOURS = setOf(BlockPos(1, 0, 0), BlockPos(-1, 0, 0), BlockPos(0, 0, 1), BlockPos(0, 0, -1))
+
         private val TILLABLE_BLOCKS = setOf(Blocks.DIRT_PATH, Blocks.DIRT, Blocks.COARSE_DIRT, Blocks.ROOTED_DIRT)
     }
 }
