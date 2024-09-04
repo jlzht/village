@@ -2,6 +2,7 @@ package com.village.mod.world
 
 import com.village.mod.LOGGER
 import com.village.mod.action.Errand
+import net.minecraft.registry.entry.RegistryEntry
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.screen.Response
 import com.village.mod.village.profession.ProfessionType
@@ -19,6 +20,7 @@ import net.minecraft.nbt.NbtCompound
 import net.minecraft.nbt.NbtElement
 import net.minecraft.nbt.NbtList
 import net.minecraft.util.math.BlockPos
+import net.minecraft.world.dimension.DimensionType
 import java.util.UUID
 import kotlin.collections.toPair
 
@@ -28,7 +30,10 @@ data class Settler(
     val errand: MutableList<Errand> = mutableListOf(),
 )
 
-data class PlayerDataField(val reputation: Int, val uuid: UUID)
+data class PlayerDataField(
+    val reputation: Int,
+    val uuid: UUID,
+)
 
 // TODO:
 // - Decide if having a villager reference to access direcly is 'good' or 'bad'
@@ -37,27 +42,35 @@ data class PlayerDataField(val reputation: Int, val uuid: UUID)
 // - implement leveling system
 // - replace PlayerDataField with Map<UUID, Int>
 // - make pos the median center point (relative to structure centers)
-class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: BlockPos) {
+class Settlement(
+    val id: Int,
+    val name: String,
+    val pos: BlockPos,
+    val dim: String, // use less data to represent state
+) {
     var structures = mutableMapOf<Int, Structure>()
     var settlers = mutableListOf<Settler>()
     var allies = arrayListOf<PlayerDataField>()
     var level: Int = 1
 
     constructor(
-        isLoaded: Boolean,
         id: Int,
         name: String,
         pos: BlockPos,
+        dim: String,
         structures: MutableMap<Int, Structure>,
         settlers: MutableList<Settler>,
         allies: ArrayList<PlayerDataField>,
-    ) : this(isLoaded, id, name, pos) {
+    ) : this(id, name, pos, dim) {
         this.structures = structures
         this.settlers = settlers
         this.allies = allies
     }
 
-    fun createStructure(pos: BlockPos, player: PlayerEntity) {
+    fun createStructure(
+        pos: BlockPos,
+        player: PlayerEntity,
+    ) {
         when (player.world.getBlockState(pos).getBlock()) {
             is FarmlandBlock -> {
                 if (
@@ -97,16 +110,17 @@ class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: 
         this.structures[key] = structure
         LOGGER.info("Added Structure: {}", structure)
         LOGGER.info("Capacity: {}", structure.capacity)
-        LOGGER.info("Errands: {}", structure.errands)
     }
 
-    fun getStructure(id: Int): Structure? {
-        return structures[id]
-    }
+    fun getStructure(id: Int): Structure? = structures[id]
 
-    fun getStructureByType(type: StructureType): Pair<Int, Structure>? {
-        return this.structures.filter { it.value.type == type && it.value.isAvailable() }.entries.firstOrNull()?.toPair()
-    }
+    fun getStructureByType(type: StructureType): Pair<Int, Structure>? =
+        this.structures
+            .filter {
+                it.value.type == type && it.value.isAvailable()
+            }.entries
+            .firstOrNull()
+            ?.toPair()
 
     fun removeStructure(id: Int) {
         this.structures.remove(id)
@@ -114,9 +128,10 @@ class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: 
 
     fun addVillager(entity: CustomVillagerEntity) {
         val key = Settlement.getAvailableKey(this.settlers.map { it.id })
+        LOGGER.info("Provided ID: {}", key)
         this.settlers.add(Settler(key, entity))
-        entity.key = key
-        entity.villageKey = this.id
+        entity.data.key = key
+        entity.data.sid = this.id
     }
 
     fun removeVillager(id: Int) {
@@ -125,7 +140,7 @@ class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: 
 
     fun getStructureInRegion(pos: BlockPos): StructureType {
         for (structure in structures.values) {
-            if (structure.area.contains(pos)) {
+            if (structure.region.contains(pos)) {
                 return structure.type
             }
         }
@@ -134,16 +149,19 @@ class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: 
 
     fun isStructureInRegion(pos: BlockPos): Boolean {
         for (structure in structures.values) {
-            if (structure.area.contains(pos)) {
+            if (structure.region.contains(pos)) {
                 return true
             }
         }
         return false
     }
 
-    fun isStructureInRange(pos: BlockPos, range: Float): Boolean {
+    fun isStructureInRange(
+        pos: BlockPos,
+        range: Float,
+    ): Boolean {
         for (structure in structures.values) {
-            if (pos.getManhattanDistance(structure.area.center()) < range) {
+            if (pos.getManhattanDistance(structure.region.center()) < range) {
                 return true
             }
         }
@@ -151,27 +169,28 @@ class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: 
     }
 
     fun getProfessionsBySettlementLevel(): List<ProfessionType> {
-        val levelProfessionMap = mapOf(
-            0 to listOf(ProfessionType.GATHERER, ProfessionType.HUNTER),
-            1 to listOf(ProfessionType.GATHERER, ProfessionType.HUNTER, ProfessionType.FARMER, ProfessionType.FISHERMAN, ProfessionType.RECRUIT),
-        )
+        val levelProfessionMap =
+            mapOf(
+                0 to listOf(ProfessionType.GATHERER, ProfessionType.HUNTER),
+                1 to listOf(ProfessionType.GUARD, ProfessionType.FARMER, ProfessionType.FISHERMAN),
+            )
         val professions = levelProfessionMap[level] ?: listOf(ProfessionType.NONE)
-        LOGGER.info("INTENDED PROFESSIONs:{}", professions)
+        LOGGER.info("Intended Profession:{}", professions)
         return professions
     }
 
-    fun toNbt(): NbtCompound {
-        return NbtCompound().apply {
+    fun toNbt(): NbtCompound =
+        NbtCompound().apply {
             putInt("VillageKey", id)
             putString("VillageName", name)
             putInt("SettlementOriginPosX", pos.x)
             putInt("SettlementOriginPosY", pos.y)
             putInt("SettlementOriginPosZ", pos.z)
+            putString("DimensionType", dim)
             putIntArray("VillagersData", settlers.map { it.id })
             put("StructuresData", structuresSerialize())
             put("AlliesData", alliesSerialize())
         }
-    }
 
     fun alliesSerialize(): NbtList {
         val nbtList = NbtList()
@@ -192,12 +211,12 @@ class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: 
             structureData.putInt("StructureType", structure.value.type.ordinal)
             structureData.putInt("StructureCapacity", structure.value.capacity)
             structureData.putIntArray("StructureSettlers", structure.value.getResidents())
-            structureData.putInt("StructureAreaLowerX", structure.value.area.lower.x) // convert blockPos to long
-            structureData.putInt("StructureAreaLowerY", structure.value.area.lower.y)
-            structureData.putInt("StructureAreaLowerZ", structure.value.area.lower.z)
-            structureData.putInt("StructureAreaUpperX", structure.value.area.upper.x)
-            structureData.putInt("StructureAreaUpperY", structure.value.area.upper.y)
-            structureData.putInt("StructureAreaUpperZ", structure.value.area.upper.z)
+            structureData.putInt("StructureAreaLowerX", structure.value.region.lower.x) // convert blockPos to long
+            structureData.putInt("StructureAreaLowerY", structure.value.region.lower.y)
+            structureData.putInt("StructureAreaLowerZ", structure.value.region.lower.z)
+            structureData.putInt("StructureAreaUpperX", structure.value.region.upper.x)
+            structureData.putInt("StructureAreaUpperY", structure.value.region.upper.y)
+            structureData.putInt("StructureAreaUpperZ", structure.value.region.upper.z)
             nbtList.add(structureData)
         }
         return nbtList
@@ -226,8 +245,10 @@ class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: 
             val structureList = mutableMapOf<Int, Structure>()
             for (i in 0 until nbtList.size) {
                 val nbt = nbtList.getCompound(i)
-                val lower = BlockPos(nbt.getInt("StructureAreaLowerX"), nbt.getInt("StructureAreaLowerY"), nbt.getInt("StructureAreaLowerZ"))
-                val upper = BlockPos(nbt.getInt("StructureAreaUpperX"), nbt.getInt("StructureAreaUpperY"), nbt.getInt("StructureAreaUpperZ"))
+                val lower =
+                    BlockPos(nbt.getInt("StructureAreaLowerX"), nbt.getInt("StructureAreaLowerY"), nbt.getInt("StructureAreaLowerZ"))
+                val upper =
+                    BlockPos(nbt.getInt("StructureAreaUpperX"), nbt.getInt("StructureAreaUpperY"), nbt.getInt("StructureAreaUpperZ"))
                 when (nbt.getInt("StructureType")) {
                     StructureType.KITCHEN.ordinal -> {
                         Building(
@@ -267,10 +288,11 @@ class Settlement(var isLoaded: Boolean, val id: Int, val name: String, val pos: 
             val id = nbt.getInt("VillageKey")
             val name = nbt.getString("VillageName")
             val pos = BlockPos(nbt.getInt("SettlementOriginPosX"), nbt.getInt("SettlementOriginPosY"), nbt.getInt("SettlementOriginPosZ"))
+            val dim = nbt.getString("DimensionType")
             val settlers = nbt.getIntArray("VillagersData").map { Settler(it, null) }.toMutableList()
             val structures = structuresDeserialize(nbt.getList("StructuresData", NbtElement.COMPOUND_TYPE.toInt()))
             val allies = alliesDeserialize(nbt.getList("AlliesData", NbtElement.COMPOUND_TYPE.toInt()))
-            return Settlement(false, id, name, pos, structures, settlers, allies)
+            return Settlement(id, name, pos, dim, structures, settlers, allies)
         }
     }
 }
