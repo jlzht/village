@@ -124,13 +124,10 @@ class TradingScreen : HandledScreen<TradingScreenHandler> {
             return this.index!!
         }
         override fun renderWidget(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
-            LOGGER.info("{} - XXX", getIndex())
             if (isLocked()) {
-                LOGGER.info("GOT KEK!")
                 context.drawTexture(getTexture(), x, y, 176, 66, 16, 7)
                 context.drawTexture(getTexture(), x + 6, y + 2, 176, 79, 3, 3)
             } else {
-                LOGGER.info("GOT NOG!")
                 context.drawTexture(getTexture(), x, y, 176, 66, 16, 7)
                 context.drawTexture(getTexture(), x + 6, y + 2, 176, 81, 3, 3)
             }

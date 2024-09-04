@@ -13,21 +13,27 @@ import net.minecraft.client.render.VertexConsumer
 import net.minecraft.client.render.entity.model.BipedEntityModel
 import net.minecraft.client.util.math.MatrixStack
 import net.minecraft.util.Arm
-import net.minecraft.util.Hand
 
 @Environment(EnvType.CLIENT)
-class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<CustomVillagerEntity>(root) {
+class CustomVillagerEntityModel(
+    private val root: ModelPart,
+) : BipedEntityModel<CustomVillagerEntity>(root) {
     private var sitOffset = false
+
+    init {
+        hat.visible = false
+    }
 
     companion object {
         fun getTexturedModelData(): TexturedModelData {
             val meshdefinition = BipedEntityModel.getModelData(Dilation.NONE, 0.0F)
             var modelPartData: ModelPartData = meshdefinition.getRoot()
-            val head: ModelPartData = modelPartData.addChild(
-                "head",
-                ModelPartBuilder.create().uv(0, 0).cuboid(-4.0F, -10.0F, -4.0F, 8.0F, 10.0F, 8.0F),
-                ModelTransform.NONE,
-            )
+            val head: ModelPartData =
+                modelPartData.addChild(
+                    "head",
+                    ModelPartBuilder.create().uv(0, 0).cuboid(-4.0F, -10.0F, -4.0F, 8.0F, 10.0F, 8.0F),
+                    ModelTransform.NONE,
+                )
             head.addChild(
                 "nose",
                 ModelPartBuilder.create().uv(24, 0).cuboid(-1.0F, -1.0F, -6.0F, 2.0F, 4.0F, 2.0F, Dilation(0.0F)),
@@ -40,10 +46,14 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
             )
             modelPartData.addChild(
                 "body",
-                ModelPartBuilder.create().uv(
-                    16,
-                    20,
-                ).cuboid(-4.0F, 0.0F, -3.0F, 8.0F, 12.0F, 6.0F).uv(0, 38).cuboid(-4.0f, 0.0f, -3.0f, 8.0f, 20.0f, 6.0f, Dilation(0.5F)),
+                ModelPartBuilder
+                    .create()
+                    .uv(
+                        16,
+                        20,
+                    ).cuboid(-4.0F, 0.0F, -3.0F, 8.0F, 12.0F, 6.0F)
+                    .uv(0, 38)
+                    .cuboid(-4.0f, 0.0f, -3.0f, 8.0f, 20.0f, 6.0f, Dilation(0.5F)),
                 ModelTransform.pivot(0.0F, 0.0F, 0.0F),
             )
             modelPartData.addChild(
@@ -53,10 +63,14 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
             )
             modelPartData.addChild(
                 "right_leg",
-                ModelPartBuilder.create().uv(
-                    0,
-                    22,
-                ).mirrored().cuboid(-2.0F, 0.0F, -2.0F, 4.0F, 12.0F, 4.0F, Dilation(0.0F)).mirrored(false),
+                ModelPartBuilder
+                    .create()
+                    .uv(
+                        0,
+                        22,
+                    ).mirrored()
+                    .cuboid(-2.0F, 0.0F, -2.0F, 4.0F, 12.0F, 4.0F, Dilation(0.0F))
+                    .mirrored(false),
                 ModelTransform.pivot(-2.0F, 12.0F, 0.0F),
             )
             modelPartData.addChild(
@@ -66,14 +80,19 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
             )
             modelPartData.addChild(
                 "left_arm",
-                ModelPartBuilder.create().uv(
-                    44,
-                    22,
-                ).mirrored().cuboid(-1.0F, -2.0F, -2.0F, 4.0F, 12.0F, 4.0F, Dilation(0.0F)).mirrored(false),
+                ModelPartBuilder
+                    .create()
+                    .uv(
+                        44,
+                        22,
+                    ).mirrored()
+                    .cuboid(-1.0F, -2.0F, -2.0F, 4.0F, 12.0F, 4.0F, Dilation(0.0F))
+                    .mirrored(false),
                 ModelTransform.pivot(5.0F, 2.0F, 0.0F),
             )
             return TexturedModelData.of(meshdefinition, 64, 64)
         }
+
         fun getOuterArmorLayer(): TexturedModelData {
             val modelData = BipedEntityModel.getModelData(Dilation(1.0f), 0.0f)
             val modelPartData = modelData.getRoot()
@@ -91,9 +110,7 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
         }
     }
 
-    override fun getHead(): ModelPart {
-        return head
-    }
+    override fun getHead(): ModelPart = head
 
     override fun setArmAngle(
         arm: Arm,
@@ -102,8 +119,15 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
         getArm(arm).rotate(matrices)
     }
 
-    override fun setAngles(entity: CustomVillagerEntity, f: Float, g: Float, h: Float, i: Float, j: Float) {
-        hat.visible = false
+    override fun setAngles(
+        entity: CustomVillagerEntity,
+        f: Float,
+        g: Float,
+        h: Float,
+        i: Float,
+        j: Float,
+    ) {
+        super.setAngles(entity, f, g, h, i, j)
         if (entity.isSitting()) {
             rightArm.pitch = -0.62831855f
             rightArm.yaw = 0.0f
@@ -118,17 +142,8 @@ class CustomVillagerEntityModel(private val root: ModelPart) : BipedEntityModel<
             leftLeg.yaw = -0.31415927f
             leftLeg.roll = -0.07853982f
             sitOffset = true
-        }
-        super.setAngles(entity, f, g, h, i, j)
-
-        if (!entity.getStackInHand(Hand.MAIN_HAND).isEmpty()) {
-            this.rightArm.pitch = this.rightArm.pitch * 0.5f - 0.31415927f
-            this.rightArm.yaw = 0.0f
-        }
-
-        if (!entity.getStackInHand(Hand.OFF_HAND).isEmpty()) {
-            this.leftArm.pitch = this.leftArm.pitch * 0.5f - 0.31415927f
-            this.leftArm.yaw = 0.0f
+        } else {
+            sitOffset = false
         }
     }
 

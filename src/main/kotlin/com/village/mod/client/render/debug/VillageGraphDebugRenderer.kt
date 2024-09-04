@@ -13,9 +13,7 @@ import net.minecraft.util.math.Vec3d
 import org.lwjgl.opengl.GL11
 
 // TODO: repurpose this to make regions overlays
-data class DebugGraph(val edges: MutableSet<Edge> = mutableSetOf<Edge>(), val vertices: MutableSet<Vertex> = mutableSetOf<Vertex>()) {
-    fun isEmpty() = edges.isEmpty() && vertices.isEmpty()
-}
+data class DebugGraph(val edges: Int)
 
 class VillageGraphDebugRenderer(val graph: DebugGraph) : WorldRenderEvents.End {
     fun drawVertices(matrixStack: MatrixStack) {
@@ -28,14 +26,14 @@ class VillageGraphDebugRenderer(val graph: DebugGraph) : WorldRenderEvents.End {
         val b = 0.15f
         val a = 1.0f
 
-        buffer.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR)
-        for (d in graph.vertices) {
-            buffer.vertex(positionMatrix, d.pos.x.toFloat() - offSet, d.pos.y.toFloat() + 0.25f, d.pos.z.toFloat() + offSet).color(r * d.type, g * d.type, d.type * b, a).next()
-            buffer.vertex(positionMatrix, d.pos.x.toFloat() - offSet, d.pos.y.toFloat() + 0.25f, d.pos.z.toFloat() - offSet).color(r * d.type, g * d.type, d.type * b, a).next()
-            buffer.vertex(positionMatrix, d.pos.x.toFloat() + offSet, d.pos.y.toFloat() + 0.25f, d.pos.z.toFloat() - offSet).color(r * d.type, g * d.type, d.type * b, a).next()
-            buffer.vertex(positionMatrix, d.pos.x.toFloat() + offSet, d.pos.y.toFloat() + 0.25f, d.pos.z.toFloat() + offSet).color(r * d.type, g * d.type, d.type * b, a).next()
-        }
-        tessellator.draw()
+        // buffer.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR)
+        // for (d in graph.vertices) {
+        //     buffer.vertex(positionMatrix, d.pos.x.toFloat() - offSet, d.pos.y.toFloat() + 0.25f, d.pos.z.toFloat() + offSet).color(r * d.type, g * d.type, d.type * b, a).next()
+        //     buffer.vertex(positionMatrix, d.pos.x.toFloat() - offSet, d.pos.y.toFloat() + 0.25f, d.pos.z.toFloat() - offSet).color(r * d.type, g * d.type, d.type * b, a).next()
+        //     buffer.vertex(positionMatrix, d.pos.x.toFloat() + offSet, d.pos.y.toFloat() + 0.25f, d.pos.z.toFloat() - offSet).color(r * d.type, g * d.type, d.type * b, a).next()
+        //     buffer.vertex(positionMatrix, d.pos.x.toFloat() + offSet, d.pos.y.toFloat() + 0.25f, d.pos.z.toFloat() + offSet).color(r * d.type, g * d.type, d.type * b, a).next()
+        // }
+        // tessellator.draw()
     }
 
     fun drawEdges(matrixStack: MatrixStack) {
@@ -55,10 +53,10 @@ class VillageGraphDebugRenderer(val graph: DebugGraph) : WorldRenderEvents.End {
         RenderSystem.lineWidth(8.0f)
 
         buffer.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR)
-        for (d in graph.edges) {
-            buffer.vertex(positionMatrix, d.start.x.toFloat(), d.start.y.toFloat() + 0.25f, d.start.z.toFloat()).color(r, g, b, a).next()
-            buffer.vertex(positionMatrix, d.end.x.toFloat(), d.end.y.toFloat() + 0.25f, d.end.z.toFloat()).color(r, g, b, a).next()
-        }
+        // for (d in graph.edges) {
+        //     buffer.vertex(positionMatrix, d.start.x.toFloat(), d.start.y.toFloat() + 0.25f, d.start.z.toFloat()).color(r, g, b, a).next()
+        //     buffer.vertex(positionMatrix, d.end.x.toFloat(), d.end.y.toFloat() + 0.25f, d.end.z.toFloat()).color(r, g, b, a).next()
+        // }
 
         tessellator.draw()
         RenderSystem.disableBlend()
@@ -66,7 +64,7 @@ class VillageGraphDebugRenderer(val graph: DebugGraph) : WorldRenderEvents.End {
     }
 
     override fun onEnd(context: WorldRenderContext) {
-        if (graph.isEmpty()) return
+        // if (graph.isEmpty()) return
         val camera = context.camera()
         val matrixStack = context.matrixStack()
         matrixStack.push()
