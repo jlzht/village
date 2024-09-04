@@ -4,6 +4,8 @@ import com.village.mod.LOGGER
 import com.village.mod.action.Action
 import com.village.mod.action.Errand
 import com.village.mod.screen.Response
+import com.village.mod.util.BlockIterator
+import com.village.mod.util.Region
 import net.minecraft.block.Blocks
 import net.minecraft.block.CropBlock
 import net.minecraft.block.FarmlandBlock
@@ -11,23 +13,28 @@ import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
 
-class Farm(val lower: BlockPos, val upper: BlockPos, capacity: Int) : Structure(capacity) {
+class Farm(
+    val lower: BlockPos,
+    val upper: BlockPos,
+    capacity: Int,
+) : Structure(capacity) {
+    override val MAX_CAPACITY: Int = 3
     override val VOLUME_PER_RESIDENT: Int = 5
     override var type: StructureType = StructureType.FARM
-    override var area: Region = Region(lower, upper)
-    override val MAX_CAPACITY: Int = 3
+    override var region: Region = Region(lower, upper)
     override val settlers: MutableList<Int> = MutableList(MAX_CAPACITY) { -1 }
 
     override fun updateErrands(world: World) {
         // errands.clear()
-        area.iterateSurface().forEach { pos ->
+        BlockIterator.CUBOID(region.lower, region.upper).forEach { pos ->
             getFarmAction(pos, world)?.let { action ->
                 LOGGER.info("| Action: {}, Pos: {}", action, pos)
-                if (!area.contains(pos)) {
-                    area.expand(pos)
-                    LOGGER.info("New volume: {}", area.area())
+                if (!region.contains(pos)) {
+                    region.append(pos)
+                    LOGGER.info("New volume: {}", region.volume())
                 }
-                val e = Errand(action, pos)
+                val apos = if (action == Action.Type.HARVEST) pos.up() else pos
+                val e = Errand(action, apos)
                 if (!errands.contains(e)) {
                     LOGGER.info("Already have!")
                 }
@@ -36,17 +43,21 @@ class Farm(val lower: BlockPos, val upper: BlockPos, capacity: Int) : Structure(
         }
         // sortErrands()
     }
+
     override fun sortErrands() {}
 
     override fun getErrands(vid: Int): List<Errand>? {
         if (!hasErrands()) return null
-        val amount = 1 // errands.size / capacity
+        val amount = errands.size / capacity
         val taken = errands.take(amount)
         errands.removeAll(taken)
         return taken
     }
 
-    private fun getFarmAction(pos: BlockPos, world: World): Action.Type? {
+    private fun getFarmAction(
+        pos: BlockPos,
+        world: World,
+    ): Action.Type? {
         val block = world.getBlockState(pos)
         LOGGER.info("--{}", block)
         if (block.isOf(Blocks.FARMLAND) && block.get(FarmlandBlock.MOISTURE) >= 5) {
@@ -74,10 +85,11 @@ class Farm(val lower: BlockPos, val upper: BlockPos, capacity: Int) : Structure(
                     (
                         (north.isOf(Blocks.FARMLAND) && north.get(FarmlandBlock.MOISTURE) >= 5) ||
                             (south.isOf(Blocks.FARMLAND) && south.get(FarmlandBlock.MOISTURE) >= 5)
-                        ) && (
+                    ) &&
+                    (
                         (west.isOf(Blocks.FARMLAND) && west.get(FarmlandBlock.MOISTURE) >= 5) ||
                             (east.isOf(Blocks.FARMLAND) && east.get(FarmlandBlock.MOISTURE) >= 5)
-                        )
+                    )
                 ) {
                     val northwest = world.getBlockState(pos.north().west())
                     val northeast = world.getBlockState(pos.north().east())
@@ -98,7 +110,10 @@ class Farm(val lower: BlockPos, val upper: BlockPos, capacity: Int) : Structure(
     }
 
     companion object {
-        fun createStructure(pos: BlockPos, player: PlayerEntity): Structure? {
+        fun createStructure(
+            pos: BlockPos,
+            player: PlayerEntity,
+        ): Structure? {
             val world = player.world
             if (
                 world.getBlockState(pos.north().west()).isOf(Blocks.FARMLAND) ||

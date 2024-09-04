@@ -4,39 +4,49 @@ import com.village.mod.entity.village.CustomVillagerEntity
 import net.minecraft.block.BlockState
 import net.minecraft.block.Blocks
 import net.minecraft.entity.Entity
-import net.minecraft.entity.ai.pathing.MobNavigation
+import net.minecraft.entity.EntityPose
 import net.minecraft.entity.ai.pathing.LandPathNodeMaker
+import net.minecraft.entity.ai.pathing.MobNavigation
 import net.minecraft.entity.ai.pathing.Path
 import net.minecraft.entity.ai.pathing.PathNodeNavigator
-import net.minecraft.entity.ai.pathing.PathNodeType
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.ChunkSectionPos
 import net.minecraft.util.math.MathHelper
 import net.minecraft.util.math.Vec3d
 import net.minecraft.world.World
 
-class VillagerNavigation(entity: CustomVillagerEntity, world: World) : MobNavigation(entity, world) {
-
+class VillagerNavigation(
+    entity: CustomVillagerEntity,
+    world: World,
+) : MobNavigation(entity, world) {
     override fun createPathNodeNavigator(range: Int): PathNodeNavigator {
-        this.nodeMaker = LandPathNodeMaker().apply {
-            setCanEnterOpenDoors(true)
-        }
+        this.nodeMaker =
+            LandPathNodeMaker().apply {
+                setCanEnterOpenDoors(true)
+            }
         return PathNodeNavigator(this.nodeMaker, range)
     }
 
-    override fun isAtValidPosition(): Boolean {
-        return this.entity.isOnGround || this.entity.isInFluid || this.entity.hasVehicle()
-    }
+    override fun isAtValidPosition(): Boolean = this.entity.isOnGround || this.entity.isInFluid || this.entity.hasVehicle()
 
-    override fun getPos(): Vec3d {
-        return Vec3d(this.entity.x, this.pathfindingY.toDouble(), this.entity.z)
-    }
+    override fun getPos(): Vec3d = Vec3d(this.entity.x, this.pathfindingY.toDouble(), this.entity.z)
 
-    override fun findPathTo(target: BlockPos, distance: Int): Path? {
+    // override fun startMovingAlong(
+    //     path: Path?,
+    //     speed: Double,
+    // ): Boolean {
+    //     return super.startMovingAlong(path, speed)
+    // }
+
+    override fun findPathTo(
+        target: BlockPos,
+        distance: Int,
+    ): Path? {
         var tar = target
         var blockPos: BlockPos
-        val worldChunk = this.world.getChunkManager().getWorldChunk(ChunkSectionPos.getSectionCoord(target.x), ChunkSectionPos.getSectionCoord(target.z))
-            ?: return null
+        val worldChunk =
+            this.world.getChunkManager().getWorldChunk(ChunkSectionPos.getSectionCoord(target.x), ChunkSectionPos.getSectionCoord(target.z))
+                ?: return null
         if (worldChunk.getBlockState(target).isAir) {
             blockPos = target.down()
             while (blockPos.y > this.world.bottomY && worldChunk.getBlockState(blockPos).isAir) {
@@ -60,9 +70,10 @@ class VillagerNavigation(entity: CustomVillagerEntity, world: World) : MobNaviga
         return super.findPathTo(tar, distance)
     }
 
-    override fun findPathTo(entity: Entity, distance: Int): Path? {
-        return this.findPathTo(entity.blockPos, distance)
-    }
+    override fun findPathTo(
+        entity: Entity,
+        distance: Int,
+    ): Path? = this.findPathTo(entity.blockPos, distance)
 
     private val pathfindingY: Int
         get() {
