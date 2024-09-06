@@ -2,7 +2,6 @@ package com.village.mod.client.render.entity
 
 import com.village.mod.entity.projectile.SimpleFishingBobberEntity
 import com.village.mod.entity.village.CustomVillagerEntity
-import com.village.mod.LOGGER
 import net.fabricmc.api.EnvType
 import net.fabricmc.api.Environment
 import net.minecraft.client.render.OverlayTexture
@@ -12,7 +11,6 @@ import net.minecraft.client.render.VertexConsumerProvider
 import net.minecraft.client.render.entity.EntityRenderer
 import net.minecraft.client.render.entity.EntityRendererFactory
 import net.minecraft.client.util.math.MatrixStack
-import net.minecraft.entity.Entity
 import net.minecraft.item.ItemStack
 import net.minecraft.item.Items
 import net.minecraft.util.Arm
@@ -23,21 +21,26 @@ import org.joml.Matrix3f
 import org.joml.Matrix4f
 
 @Environment(EnvType.CLIENT)
-class SimpleFishingBobberEntityRenderer(context: EntityRendererFactory.Context) : EntityRenderer<SimpleFishingBobberEntity>(context) {
+class SimpleFishingBobberEntityRenderer(
+    context: EntityRendererFactory.Context,
+) : EntityRenderer<SimpleFishingBobberEntity>(context) {
     companion object {
         private val TEXTURE = Identifier("textures/entity/fishing_hook.png")
         private val LAYER = RenderLayer.getEntityCutout(TEXTURE)
     }
 
-    override fun render(simpleFishingBobberEntity: SimpleFishingBobberEntity, f: Float, g: Float, matrixStack: MatrixStack, vertexConsumerProvider: VertexConsumerProvider, i: Int) {
-        LOGGER.info("LOOK UP")
+    override fun render(
+        simpleFishingBobberEntity: SimpleFishingBobberEntity,
+        f: Float,
+        g: Float,
+        matrixStack: MatrixStack,
+        vertexConsumerProvider: VertexConsumerProvider,
+        i: Int,
+    ) {
         val entity = simpleFishingBobberEntity.getOwner()
-        if (entity == null) {
-            LOGGER.info("NO OWNER")
-            return
-        }
+        if (entity == null) return
         entity as CustomVillagerEntity
-        //matrixStack.push() <- fix crash on this
+        matrixStack.push()
         matrixStack.push()
         matrixStack.scale(0.5f, 0.5f, 0.5f)
         matrixStack.multiply(dispatcher.rotation)
@@ -82,19 +85,50 @@ class SimpleFishingBobberEntityRenderer(context: EntityRendererFactory.Context) 
         super.render(simpleFishingBobberEntity, f, g, matrixStack, vertexConsumerProvider, i)
     }
 
-    override fun getTexture(simpleFishingBobberEntity: SimpleFishingBobberEntity): Identifier {
-        return TEXTURE
+    override fun getTexture(simpleFishingBobberEntity: SimpleFishingBobberEntity): Identifier = TEXTURE
+
+    private fun percentage(
+        value: Int,
+        max: Int,
+    ): Float = value.toFloat() / max.toFloat()
+
+    private fun vertex(
+        buffer: VertexConsumer,
+        matrix: Matrix4f,
+        normalMatrix: Matrix3f,
+        light: Int,
+        x: Float,
+        y: Int,
+        u: Int,
+        v: Int,
+    ) {
+        buffer
+            .vertex(
+                matrix,
+                x - 0.5f,
+                y - 0.5f,
+                0.0f,
+            ).color(
+                255,
+                255,
+                255,
+                255,
+            ).texture(u.toFloat(), v.toFloat())
+            .overlay(OverlayTexture.DEFAULT_UV)
+            .light(light)
+            .normal(normalMatrix, 0.0f, 1.0f, 0.0f)
+            .next()
     }
 
-    private fun percentage(value: Int, max: Int): Float {
-        return value.toFloat() / max.toFloat()
-    }
-
-    private fun vertex(buffer: VertexConsumer, matrix: Matrix4f, normalMatrix: Matrix3f, light: Int, x: Float, y: Int, u: Int, v: Int) {
-        buffer.vertex(matrix, x - 0.5f, y - 0.5f, 0.0f).color(255, 255, 255, 255).texture(u.toFloat(), v.toFloat()).overlay(OverlayTexture.DEFAULT_UV).light(light).normal(normalMatrix, 0.0f, 1.0f, 0.0f).next()
-    }
-
-    private fun renderFishingLine(x: Float, y: Float, z: Float, buffer: VertexConsumer, matrices: MatrixStack.Entry, segmentStart: Float, segmentEnd: Float) {
+    private fun renderFishingLine(
+        x: Float,
+        y: Float,
+        z: Float,
+        buffer: VertexConsumer,
+        matrices: MatrixStack.Entry,
+        segmentStart: Float,
+        segmentEnd: Float,
+    ) {
         val f = x * segmentStart
         val g = y * (segmentStart * segmentStart + segmentStart) * 0.5f + 0.25f
         val h = z * segmentStart
@@ -102,6 +136,10 @@ class SimpleFishingBobberEntityRenderer(context: EntityRendererFactory.Context) 
         val j = y * (segmentEnd * segmentEnd + segmentEnd) * 0.5f + 0.25f - g
         val k = z * segmentEnd - h
         val l = MathHelper.sqrt(i * i + j * j + k * k)
-        buffer.vertex(matrices.positionMatrix, f, g, h).color(0, 0, 0, 255).normal(matrices.normalMatrix, i / l, j / l, k / l).next()
+        buffer
+            .vertex(matrices.positionMatrix, f, g, h)
+            .color(0, 0, 0, 255)
+            .normal(matrices.normalMatrix, i / l, j / l, k / l)
+            .next()
     }
 }

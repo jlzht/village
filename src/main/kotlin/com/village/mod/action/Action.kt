@@ -1,12 +1,12 @@
 package com.village.mod.action
 
 import com.village.mod.LOGGER
-import com.village.mod.util.BlockIterator
 import com.village.mod.entity.projectile.SimpleFishingBobberEntity
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.item.ItemPredicate
-import com.village.mod.utils.CombatUtils
+import com.village.mod.util.BlockIterator
 import com.village.mod.util.Finder
+import com.village.mod.utils.CombatUtils
 import com.village.mod.village.profession.Fisherman
 import net.minecraft.block.Block
 import net.minecraft.block.Blocks
@@ -189,12 +189,12 @@ sealed class Action {
     }
 
     object Fish : Action() {
-        override val scan: Input = { e, _ -> (e.inventory.hasItem(ItemPredicate.FISHING_ROD)).toByte(4) }
+        override val scan: Input = { e, _ -> e.inventory.hasItem(ItemPredicate.FISHING_ROD).toByte(4) }
 
         override val test: Input = { e, p ->
             val fisherman = (e.getProfession() as Fisherman)
             (
-                BlockIterator.NEIGHBOURS(p!!).all { e.world.getBlockState(p).block == Blocks.WATER } &&
+                BlockIterator.BOTTOM(p!!).all { e.world.getBlockState(p).block == Blocks.WATER } &&
                     fisherman.getFishHook() == null &&
                     e.inventory.tryEquip(ItemPredicate.FISHING_ROD, EquipmentSlot.MAINHAND)
             ).toByte()
@@ -204,7 +204,7 @@ sealed class Action {
             // TODO: calculate velocity and angle to throw fishing bobber as pos
             e.world.spawnEntity(SimpleFishingBobberEntity(e, e.world, 0, 0))
             e.swingHand(Hand.MAIN_HAND)
-            0
+            1
         }
 
         override val eval: Input = { e, _ ->
@@ -217,6 +217,10 @@ sealed class Action {
                 0
             }
         }
+        override val radiusToAct: Float = 20.0f
+        override val radiusToLook: Float = 20.0f
+        override val ticksToTest: Int = 1
+        override val ticksToExec: Int = 10
     }
 
     object Sit : Action() {
@@ -283,7 +287,7 @@ sealed class Action {
             e.setCurrentHand(Hand.OFF_HAND)
             1
         }
-        override val eval: Input = { e, _ -> ( !e.isEating()).toByte() }
+        override val eval: Input = { e, _ -> (!e.isEating()).toByte() }
     }
 
     object Store : Action() {
@@ -555,7 +559,7 @@ sealed class Action {
                 Type.AIM to Aim,
             )
 
-        fun get(type: Type): Action = map[type] ?: Pick
+        fun get(type: Type): Action = map[type] ?: Move
 
         // TODO: puts these on a general utils object
         fun Boolean.toByte(mult: Int): Byte = if (this) (1 * mult).toByte() else 0
