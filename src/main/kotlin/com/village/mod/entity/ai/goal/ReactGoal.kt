@@ -5,6 +5,7 @@ import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.util.Finder
 import com.village.mod.village.profession.Guard
 import net.minecraft.entity.ai.goal.Goal
+import net.minecraft.registry.tag.FluidTags
 import java.util.EnumSet
 
 class ReactGoal(
@@ -16,17 +17,26 @@ class ReactGoal(
         this.setControls(EnumSet.of(Goal.Control.TARGET))
     }
 
-    override fun canStart(): Boolean = entity.target != null && entity.target!!.isAlive
+    override fun canStart(): Boolean = true
 
     override fun shouldContinue(): Boolean = false
 
     override fun shouldRunEveryTick(): Boolean = true
 
     override fun tick() {
-        entity.target?.let { target ->
-            if (!target.isAlive) entity.target = null
-            val errand = entity.getErrandsManager().peek()
+        if (entity.isTouchingWater() && entity.getFluidHeight(FluidTags.WATER) > entity.getSwimHeight()) {
+            val g = if (entity.horizontalCollision) 0.3f else 0.15f
+            if (entity.getRandom().nextFloat() < g || entity.getAir() < 20) {
+                entity.getJumpControl().setActive()
+            }
+        }
 
+        entity.target?.let { target ->
+            if (!target.isAlive) {
+                entity.target = null
+                return
+            }
+            val errand = entity.getErrandsManager().peek()
             if (
                 errand == null ||
                 (

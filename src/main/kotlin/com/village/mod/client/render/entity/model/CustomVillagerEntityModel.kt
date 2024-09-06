@@ -1,6 +1,7 @@
 package com.village.mod.client.render.entity.model
 
 import com.village.mod.entity.village.CustomVillagerEntity
+import com.village.mod.LOGGER
 import net.fabricmc.api.EnvType
 import net.fabricmc.api.Environment
 import net.minecraft.client.model.Dilation
@@ -144,6 +145,12 @@ class CustomVillagerEntityModel(
             sitOffset = true
         } else {
             sitOffset = false
+        }
+        if (entity.isSwimming()) {
+            this.lerpAngle(this.leaningPitch, this.head.pitch, -0.7853982f / 4)
+            this.lerpAngle(this.leaningPitch, this.rightArm.roll, -0.7853982f / 4)
+        } else {
+            this.lerpAngle(this.leaningPitch, this.head.pitch, j * ((Math.PI.toFloat()) / 180))
         }
     }
 

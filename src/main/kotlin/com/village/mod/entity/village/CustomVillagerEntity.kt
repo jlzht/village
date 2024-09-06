@@ -32,6 +32,7 @@ import net.minecraft.item.Items
 import net.minecraft.nbt.NbtCompound
 import net.minecraft.nbt.NbtElement
 import net.minecraft.network.PacketByteBuf
+import net.minecraft.registry.tag.FluidTags
 import net.minecraft.screen.ScreenHandler
 import net.minecraft.server.network.ServerPlayerEntity
 import net.minecraft.sound.SoundCategory
@@ -63,13 +64,9 @@ class CustomVillagerEntity(
     fun getErrandsManager(): ErrandManager = errandsManager
 
     val inventory: VillagerInventory = VillagerInventory(this)
-    private lateinit var profession: Profession
+    private lateinit var profession: Profession // do not use lateinit
 
     val data = VillagerData()
-
-    // villagerData key - id , village id, village dim
-    // var key: Int = -1
-    // var villageKey: Int = -1
 
     init {
         this.getNavigation().setCanSwim(false)
@@ -177,7 +174,20 @@ class CustomVillagerEntity(
         return stack
     }
 
-    override fun getSwimHeight(): Double = 0.6
+    override fun updateSwimming() {
+        if (!this.getWorld().isClient) {
+            val height = this.getSwimHeight()
+            if (this.isTouchingWater() && height != 0.5 && this.getFluidHeight(FluidTags.WATER) > height) {
+                this.setSwimming(true)
+            } else {
+                this.setSwimming(false)
+            }
+        }
+    }
+
+    override fun isInSwimmingPose(): Boolean = isOnWater
+
+    override fun getSwimHeight(): Double = if (this.horizontalCollision) 0.5 else 1.2
 
     override fun getUnscaledRidingOffset(vehicle: Entity): Float = -0.6f
 
@@ -266,6 +276,14 @@ class CustomVillagerEntity(
         return super.interactMob(player, hand)
     }
 
+    private var isOnWater: Boolean = false
+
+    override fun tick() {
+        isOnWater = this.isSwimming()
+        super.tick()
+        isOnWater = false
+    }
+
     override fun tickMovement() {
         this.tickHandSwing()
         super.tickMovement()
@@ -299,7 +317,7 @@ class CustomVillagerEntity(
         LOGGER.info("Villager {} died, message: {}", this as Any, damageSource.getDeathMessage(this).string)
         this.inventory.dropAll()
         if (hasVillage()) {
-            // SettlementManager.leaveSettlement(this)
+            SettlementManager.leaveSettlement(this)
         }
         super.onDeath(damageSource)
     }
@@ -321,11 +339,14 @@ class CustomVillagerEntity(
         }
         // add check for first spawn
         this.setProfession(ProfessionType.values()[nbt.getInt("VillagerProfession")])
-        if (nbt.contains("SettlementID", NbtElement.LIST_TYPE.toInt())) {
+        if (nbt.contains("SettlementID", NbtElement.INT_TYPE.toInt())) {
             this.data.sid = nbt.getInt("SettlementID")
             this.data.key = nbt.getInt("SettlementKey")
             this.data.dim = nbt.getString("SettlementDim")
         }
+
+        this.getErrandsManager().homeID = nbt.getInt("HomeStructure")
+        this.getErrandsManager().workID = nbt.getInt("WorkStructure")
     }
 
     override fun writeCustomDataToNbt(nbt: NbtCompound) {
@@ -335,6 +356,8 @@ class CustomVillagerEntity(
         nbt.putInt("SettlementID", this.data.sid)
         nbt.putInt("SettlementKey", this.data.key)
         nbt.putInt("SettlementDim", this.data.key)
+        nbt.putInt("HomeStructure", this.getErrandsManager().homeID)
+        nbt.putInt("WorkStructure", this.getErrandsManager().workID)
     }
 
     companion object {
