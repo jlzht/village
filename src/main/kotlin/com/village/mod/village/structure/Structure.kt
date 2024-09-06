@@ -24,8 +24,6 @@ sealed class Structure(
 
     abstract fun getErrands(vid: Int): List<Errand>?
 
-    abstract fun sortErrands()
-
     fun showErrands() {
         errands.forEach { e ->
             LOGGER.info("Action:{} - Pos:{}", e.cid, e.pos)
@@ -36,6 +34,18 @@ sealed class Structure(
 
     fun addResident(vid: Int) {
         settlers.set(settlers.indexOfFirst { it == -1 }, vid)
+    }
+
+    fun getResidentIndex(vid: Int): Int {
+        var i: Int = 1
+        for (settler in settlers) {
+            if (settler == vid) {
+                return i
+            } else {
+                i++
+            }
+        }
+        return 0
     }
 
     fun removeResident(vid: Int) {

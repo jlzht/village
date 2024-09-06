@@ -57,7 +57,6 @@ class ActGoal(
 
     override fun tick() {
         errand?.let { (cid, pos) ->
-            // LOGGER.info("State: {}, Ticks: {}|{}", state, tickToTestCount, tickToExecCount)
             val action = Action.get(cid)
             val distance =
                 entity.target?.let { target ->
@@ -65,7 +64,7 @@ class ActGoal(
                     if (action.shouldLook(distance)) {
                         entity.getLookControl().lookAt(target)
                     }
-                    // handle special cases like flee
+                    // TODO: handle special cases like flee
                     if (entity.isAttacking() && cid != Action.Type.FLEE) {
                         if (target.isAlive) {
                             val npath = entity.navigation.findPathTo(target, 1)
@@ -93,6 +92,7 @@ class ActGoal(
             if (action.shouldMove(distance)) {
                 path?.let {
                     entity.getUp()
+                    // lame implementation of Door openning
                     Finder.findDoorBlock(entity.world, path!!)?.let {
                         entity.getErrandsManager().add(it)
                     }
@@ -121,7 +121,6 @@ class ActGoal(
                     return
                 }
 
-                // lame implementation of Door openning
             } else {
                 tickToTestCount++
             }

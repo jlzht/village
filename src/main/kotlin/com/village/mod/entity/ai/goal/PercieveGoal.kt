@@ -1,13 +1,11 @@
 package com.village.mod.entity.ai.goal
 
-import com.village.mod.LOGGER
 import com.village.mod.action.Action
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.village.profession.Guard
 import net.minecraft.entity.ItemEntity
 import net.minecraft.entity.LivingEntity
 import net.minecraft.entity.ai.goal.Goal
-import net.minecraft.entity.attribute.EntityAttributes
 import net.minecraft.entity.mob.HostileEntity
 import net.minecraft.entity.mob.Monster
 import net.minecraft.entity.player.PlayerEntity
@@ -27,9 +25,9 @@ class PercieveGoal(
         this.setControls(EnumSet.of(Goal.Control.TARGET))
     }
 
+    // TODO: add special behavior for lava
     override fun canStart(): Boolean {
         if (entity.isSleeping()) return false
-
         entity.target?.let { target ->
             entity.getRecentDamageSource()?.let { damageSource ->
                 val attacker = damageSource.getAttacker()
@@ -45,8 +43,7 @@ class PercieveGoal(
                     return false
                 }
             }
-            val d = this.getFollowRange()
-            if (entity.squaredDistanceTo(target) > d * d) {
+            if (entity.squaredDistanceTo(target) > 32 * 32) {
                 entity.target = null
                 return false
             }
@@ -59,7 +56,6 @@ class PercieveGoal(
     override fun shouldContinue(): Boolean = false
 
     override fun start() {
-        LOGGER.info("Percieving")
         entity.setFighting(false)
         entity.setAttacking(false)
         if (tickCooldown > 5) {
@@ -73,12 +69,9 @@ class PercieveGoal(
         }
     }
 
-    private fun getFollowRange(): Double = entity.getAttributeValue(EntityAttributes.GENERIC_FOLLOW_RANGE)
-
     private fun getSearchBox(distance: Double): Box = entity.boundingBox.expand(distance, 4.0, distance)
 
     private fun getNearbyEntities() {
-        LOGGER.info("getting nearby entities")
         entity
             .getWorld()
             .getOtherEntities(entity, this.getSearchBox(16.0))
@@ -116,8 +109,9 @@ class PercieveGoal(
                             else -> entity.setTarget(it)
                         }
                         if (entity.isFighting()) return
-                        if (entity.random.nextInt(20) != 0) return // no danger, so it tries to pickup nearby items
+                        if (entity.random.nextInt(10) != 0) return // no danger, so it tries to pickup nearby items
                     }
+
                 if (!entity.getErrandsManager().has(Action.Type.PICK)) {
                     entities
                         .filterIsInstance<ItemEntity>()

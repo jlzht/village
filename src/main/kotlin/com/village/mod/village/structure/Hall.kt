@@ -17,8 +17,6 @@ class Hall(
     override var region: Region = Region(lower, upper)
     override val settlers: MutableList<Int> = MutableList(MAX_CAPACITY) { -1 }
 
-    override fun sortErrands() {}
-
     override fun getErrands(vid: Int): List<Errand>? = null
 
     override fun updateErrands(world: World) {}

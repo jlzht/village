@@ -185,14 +185,16 @@ class SettlementManager : PersistentState() {
             }
         }
 
-        fun assignStructure(
+        fun attachStructure(
             entity: CustomVillagerEntity,
             sid: Int,
         ) {
             // add structure check to see if ID matches
             getInstance().findSettlement(entity.data.sid)?.let { settlement ->
                 settlement.getStructure(sid)?.let { structure ->
+                    LOGGER.info("found sstruee")
                     if (structure.getResidents().contains(entity.data.key)) {
+                        LOGGER.info("GOT HERE!")
                         entity.getErrandsManager().assignStructure(
                             sid,
                             { key -> structure.getErrands(key) },
@@ -207,7 +209,9 @@ class SettlementManager : PersistentState() {
             entity: CustomVillagerEntity,
             type: StructureType,
         ) {
+            LOGGER.info("got here")
             getInstance().findSettlement(entity.data.sid)?.let { settlement ->
+                LOGGER.info("in settlement: {}", settlement)
                 settlement.getStructureByType(type)?.let { (id, structure) ->
                     entity.getErrandsManager().assignStructure(
                         id,
@@ -223,7 +227,7 @@ class SettlementManager : PersistentState() {
         fun setProfession(entity: CustomVillagerEntity) {
             getInstance().getSettlements().minByOrNull { it.pos.getSquaredDistance(entity.pos) }?.let { settlement ->
                 val professions = settlement.getProfessionsBySettlementLevel()
-                val profession = professions[entity.random.nextInt(professions.size - 1)]
+                val profession = professions[entity.random.nextInt(professions.size)]
                 LOGGER.info("SETTING PROFESSION TO: {}", profession)
                 entity.setProfession(profession)
             }

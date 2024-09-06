@@ -1,18 +1,28 @@
 package com.village.mod.util
 
+import com.village.mod.LOGGER
+import net.minecraft.block.BlockState
+import net.minecraft.block.Blocks
+import net.minecraft.block.HorizontalFacingBlock
+import net.minecraft.block.Waterloggable
+import net.minecraft.registry.tag.BlockTags
 import net.minecraft.util.math.BlockPos
+import net.minecraft.world.World
+import java.util.ArrayDeque
+import java.util.Queue
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-//
+typealias CellPredicate = (BlockPos, BlockState, HashSet<BlockPos>) -> Boolean
+
 object BlockIterator {
     private val neighboursOffsets =
         setOf(
-            BlockPos(1, 0, 0), // east
-            BlockPos(-1, 0, 0), // west
-            BlockPos(0, 0, 1), // south
-            BlockPos(0, 0, -1), // north
+            BlockPos(1, 0, 0),
+            BlockPos(-1, 0, 0),
+            BlockPos(0, 0, 1),
+            BlockPos(0, 0, -1),
         )
 
     val NEIGHBOURS: (BlockPos) -> List<BlockPos> = { b ->
@@ -20,12 +30,12 @@ object BlockIterator {
     }
     private val touchingOffsets =
         setOf(
-            BlockPos(0, 0, -1), // north
-            BlockPos(0, 0, 1), // south
-            BlockPos(1, 0, 0), // east
-            BlockPos(-1, 0, 0), // west
-            BlockPos(0, 1, 0), // up
-            BlockPos(0, -1, 0), // down
+            BlockPos(0, 0, -1),
+            BlockPos(0, 0, 1),
+            BlockPos(1, 0, 0),
+            BlockPos(-1, 0, 0),
+            BlockPos(0, 1, 0),
+            BlockPos(0, -1, 0),
         )
 
     val TOUCHING: (BlockPos) -> List<BlockPos> = { b ->
@@ -92,5 +102,68 @@ object BlockIterator {
                 }
             }
         }
+    }
+
+    val BUILDING_AVAILABLE_SPACE: CellPredicate = { pos, state, cached ->
+        (
+            state.isOf(Blocks.AIR) ||
+                (
+                    state.getBlock() is HorizontalFacingBlock &&
+                        !state.isIn(BlockTags.TRAPDOORS) &&
+                        !state.isIn(BlockTags.FENCE_GATES)
+                ) ||
+                (state.getBlock() is Waterloggable && cached.contains(pos.up()))
+        )
+    }
+
+    val RIVER_AVAILABLE_SPACE: CellPredicate = { _, state, _ ->
+        state.isOf(Blocks.WATER) // add more blocks
+    }
+
+    val FLOOD_FILL: (World, BlockPos, CellPredicate) -> Pair<Int, Iterable<BlockPos>>? = { world, spos, check ->
+        val queue: Queue<BlockPos> = ArrayDeque()
+        val visited = HashSet<BlockPos>()
+        var iterations = 0
+        var edgesCount = 0
+        var totalCount = 0
+        queue.add(spos)
+        val edges = mutableListOf<BlockPos>()
+        while (queue.isNotEmpty()) {
+            val current = queue.poll()
+            if (!visited.contains(current)) {
+                iterations++
+                if (edgesCount >= 32 || iterations >= 512) {
+                    LOGGER.info("TRIGGERED")
+                    break
+                }
+                var blockedCount = 0
+                var freeCount = 0
+                BlockIterator.TOUCHING(current).forEach { pos ->
+                    if (!visited.contains(pos)) {
+                        val state = world.getBlockState(pos)
+                        if (check(pos, state, visited)) {
+                            queue.add(pos)
+                            totalCount++
+                            freeCount++
+                        }
+                    } else {
+                        if (blockedCount <= 3) {
+                            blockedCount++
+                        }
+                    }
+                }
+                // counts possible edges
+                if ((blockedCount == 3 && freeCount == 0) ||
+                    (blockedCount == 1 && freeCount == 2) ||
+                    (blockedCount == 2 && freeCount == 1)
+                ) {
+                    edgesCount++
+                    edges.add(current)
+                }
+            }
+            visited.add(current)
+        }
+        queue.clear()
+        if (edgesCount <= 32 && iterations <= 512) Pair(totalCount, edges) else null
     }
 }

@@ -21,9 +21,16 @@ data class Region(
             )
     }
 
-    fun grow() {
-        lower = BlockPos(lower.x - 1, lower.y - 1, lower.z - 1)
-        upper = BlockPos(upper.x + 1, upper.y + 1, upper.z + 1)
+    fun shrink(): Region {
+        val l = BlockPos(lower.x + 1, lower.y + 1, lower.z + 1)
+        val u = BlockPos(upper.x - 1, upper.y - 1, upper.z - 1)
+        return Region(l, u)
+    }
+
+    fun grow(): Region {
+        val l = BlockPos(lower.x - 1, lower.y - 1, lower.z - 1)
+        val u = BlockPos(upper.x + 1, upper.y + 1, upper.z + 1)
+        return Region(l, u)
     }
 
     fun volume(): Int = (upper.x - lower.x + 1) * (upper.y - lower.y + 1) * (upper.z - lower.z + 1)
@@ -35,11 +42,11 @@ data class Region(
         return BlockPos(middleX, middleY, middleZ)
     }
 
-    fun contains(pos: BlockPos): Boolean =
-        pos.x >= lower.x &&
-            pos.x <= upper.x &&
-            pos.y >= lower.y &&
-            pos.y <= upper.y &&
-            pos.z >= lower.z &&
-            pos.z <= upper.z
+    fun contains(point: BlockPos): Boolean =
+        point.x >= lower.x &&
+            point.x <= upper.x &&
+            point.y >= lower.y &&
+            point.y <= upper.y &&
+            point.z >= lower.z &&
+            point.z <= upper.z
 }

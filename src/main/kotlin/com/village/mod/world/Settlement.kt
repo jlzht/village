@@ -2,7 +2,6 @@ package com.village.mod.world
 
 import com.village.mod.LOGGER
 import com.village.mod.action.Errand
-import net.minecraft.registry.entry.RegistryEntry
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.screen.Response
 import com.village.mod.village.profession.ProfessionType
@@ -20,7 +19,6 @@ import net.minecraft.nbt.NbtCompound
 import net.minecraft.nbt.NbtElement
 import net.minecraft.nbt.NbtList
 import net.minecraft.util.math.BlockPos
-import net.minecraft.world.dimension.DimensionType
 import java.util.UUID
 import kotlin.collections.toPair
 
@@ -108,8 +106,6 @@ class Settlement(
         // TODO: create method that finds allies players by UUID and sendMessage to them notifying structure creating
         val key = Settlement.getAvailableKey(this.structures.map { it.key })
         this.structures[key] = structure
-        LOGGER.info("Added Structure: {}", structure)
-        LOGGER.info("Capacity: {}", structure.capacity)
     }
 
     fun getStructure(id: Int): Structure? = structures[id]
@@ -128,7 +124,6 @@ class Settlement(
 
     fun addVillager(entity: CustomVillagerEntity) {
         val key = Settlement.getAvailableKey(this.settlers.map { it.id })
-        LOGGER.info("Provided ID: {}", key)
         this.settlers.add(Settler(key, entity))
         entity.data.key = key
         entity.data.sid = this.id
@@ -175,7 +170,6 @@ class Settlement(
                 1 to listOf(ProfessionType.GUARD, ProfessionType.FARMER, ProfessionType.FISHERMAN),
             )
         val professions = levelProfessionMap[level] ?: listOf(ProfessionType.NONE)
-        LOGGER.info("Intended Profession:{}", professions)
         return professions
     }
 
@@ -279,6 +273,9 @@ class Settlement(
                     else -> null
                 }?.let {
                     structureList[nbt.getInt("StructureKey")] = it
+                    nbt.getIntArray("StructureSettlers").forEach { vid ->
+                        it.addResident(vid)
+                    }
                 }
             }
             return structureList

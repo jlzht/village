@@ -25,8 +25,8 @@ class ErrandManager(
 
     private val queue = PriorityQueue(errandComparator)
 
-    var homeID: Int = -1
-    var workID: Int = -1
+    var homeID: Int = 0
+    var workID: Int = 0
 
     fun peek(): Errand? {
         if (queue.isEmpty()) {
@@ -64,21 +64,18 @@ class ErrandManager(
         val combinedErrands = mutableListOf<Errand>()
         homeErrands?.let { errands ->
             val list = errands.invoke(entity.data.key)
-            LOGGER.info(">>>> {}", list)
             list?.let {
                 combinedErrands.addAll(list)
             }
         }
         workErrands?.let { errands ->
             val list = errands.invoke(entity.data.key)
-            LOGGER.info(">>>> {}", list)
             list?.let {
                 combinedErrands.addAll(list)
             }
         }
-        LOGGER.info("|> Combined Errands: {}", combinedErrands)
-        val filteredErrands = combinedErrands.filter { calculatePriority(it) > 0.0 }
-        queue.addAll(filteredErrands)
+        val filtered = combinedErrands.filter { calculatePriority(it) > 0.0 }
+        queue.addAll(filtered)
     }
 
     private fun printQueue() {

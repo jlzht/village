@@ -25,8 +25,7 @@ class Farm(
     override val settlers: MutableList<Int> = MutableList(MAX_CAPACITY) { -1 }
 
     override fun updateErrands(world: World) {
-        // errands.clear()
-        BlockIterator.CUBOID(region.lower, region.upper).forEach { pos ->
+        BlockIterator.CUBOID(region.lower.add(-1, 0, -1), region.upper.add(1, 0, 1)).forEach { pos ->
             getFarmAction(pos, world)?.let { action ->
                 LOGGER.info("| Action: {}, Pos: {}", action, pos)
                 if (!region.contains(pos)) {
@@ -41,10 +40,7 @@ class Farm(
                 errands.add(e)
             }
         }
-        // sortErrands()
     }
-
-    override fun sortErrands() {}
 
     override fun getErrands(vid: Int): List<Errand>? {
         if (!hasErrands()) return null

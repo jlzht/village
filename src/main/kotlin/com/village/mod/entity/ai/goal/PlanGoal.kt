@@ -16,32 +16,35 @@ class PlanGoal(
     }
 
     override fun canStart(): Boolean {
-        if (entity.random.nextInt(10) != 0) return false
+        if (entity.random.nextInt(20) != 0) return false
         return !entity.getErrandsManager().hasErrands()
     }
 
     override fun shouldContinue() = false
 
     override fun start() {
-        LOGGER.info("Entering")
         if (entity.world.isClient) return
         if (!entity.hasVillage()) {
             SettlementManager.visitSettlement(entity)
             SettlementManager.joinSettlement(entity)
             // how to test if villager is interested in settling down?
         } else {
-            // if (!entity.getErrandsManager().hasHome()) {
+            val manager = entity.getErrandsManager()
+            // if (manager.homeID == 0) {
+            //    LOGGER.info("WILL LOOK FOR HOUSE")
             //    SettlementManager.assignStructure(entity, StructureType.HOUSE)
+            // } else if (!manager.hasHome()) {
+            //    LOGGER.info("WILL ATTACH TO HOME - {}", manager.homeID)
+            //    SettlementManager.attachStructure(entity, manager.homeID)
             // }
-            if (!entity.getErrandsManager().hasWork()) {
+            if (manager.workID == 0) {
                 entity.getProfession()?.let { profession ->
                     SettlementManager.assignStructure(entity, profession.structureInterest)
                 }
+            } else if (!manager.hasWork()) {
+                SettlementManager.attachStructure(entity, manager.workID)
             }
-        }
-
-        if (entity.getErrandsManager().hasWork()) {
-            entity.getErrandsManager().update()
+            manager.update()
         }
     }
 }

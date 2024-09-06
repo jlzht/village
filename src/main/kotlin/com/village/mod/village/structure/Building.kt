@@ -8,17 +8,13 @@ import com.village.mod.util.BlockIterator
 import com.village.mod.util.Region
 import net.minecraft.block.BedBlock
 import net.minecraft.block.BlockState
-import net.minecraft.block.Blocks
 import net.minecraft.block.ChestBlock
 import net.minecraft.block.DoorBlock
-import net.minecraft.block.HorizontalFacingBlock
-import net.minecraft.block.Waterloggable
+import net.minecraft.block.SlabBlock
+import net.minecraft.block.enums.BedPart
 import net.minecraft.entity.player.PlayerEntity
-import net.minecraft.registry.tag.BlockTags
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
-import java.util.ArrayDeque
-import java.util.Queue
 
 class Building(
     override var type: StructureType,
@@ -31,109 +27,117 @@ class Building(
     override var region: Region = Region(lower, upper)
     override val settlers: MutableList<Int> = MutableList(MAX_CAPACITY) { -1 }
 
-    override fun sortErrands() {}
+    private fun sortErrands(foundErrands: List<Errand>): List<Errand> {
+        val mainActionType = Action.Type.SLEEP // Define the main action type for sorting
+        val mainErrands = foundErrands.filter { it.cid == mainActionType }
+        val mutableErrands = mainErrands.toMutableList()
 
-    override fun getErrands(vid: Int): List<Errand> = emptyList()
+        val remainingErrands = foundErrands.filter { it.cid != mainActionType }.toMutableList()
 
-    override fun updateErrands(world: World) {}
+        remainingErrands.forEach { errand ->
+            val nearestMainErrand =
+                mainErrands.minByOrNull {
+                    it.pos!!.getSquaredDistance(errand.pos)
+                }
 
-    companion object {
-
-        private fun getAction(
-            pos: BlockPos,
-            state: BlockState,
-        ): Errand? {
-            when (state.block) {
-                is BedBlock -> return Errand(Action.Type.SLEEP, pos)
-                is ChestBlock -> Errand(Action.Type.STORE, pos)
-            }
-            return null
-        }
-
-        fun assignStructure(
-            region: Region,
-            world: World,
-        ): Pair<StructureType, List<Errand>>? {
-            // just a placeholder, bleh
-            BlockIterator.CUBOID(region.lower, region.upper).forEach { pos ->
-                getAction(pos, world.getBlockState(pos))
-            }
-            // get the most representative blocks
-            return null
-        }
-
-        // TODO: transform this into a iterator
-        private fun getRegion(
-            player: PlayerEntity,
-            startPos: BlockPos,
-        ): Region? {
-            val queue: Queue<BlockPos> = ArrayDeque()
-            val visited = HashSet<BlockPos>()
-            var edgeIterator: Int = 0 // total edges found
-            var iterations: Int = 0
-            var lightCount: Int = 0
-            val edges = Region(startPos, startPos)
-            queue.add(startPos)
-            while (queue.isNotEmpty()) {
-                val current = queue.poll()
-                if (!visited.contains(current)) {
-                    iterations++
-                    if (edgeIterator >= 32 || iterations >= 512) {
-                        queue.clear()
-                        Response.STRUCTURE_NOT_ENCLOSED.send(player)
-                        return null
-                    }
-                    var blockedCount = 0 // counts neighbours already added
-                    var freeCount = 0 // counts neighbours added
-                    BlockIterator.TOUCHING(current).forEach { pos ->
-                        if (!visited.contains(pos)) {
-                            val blockState = player.world.getBlockState(pos)
-                            if (blockState.isOf(Blocks.AIR) ||
-                                (
-                                    blockState.getBlock() is HorizontalFacingBlock &&
-                                        !blockState.isIn(BlockTags.TRAPDOORS) &&
-                                        !blockState.isIn(BlockTags.FENCE_GATES)
-                                ) ||
-                                (blockState.getBlock() is Waterloggable) &&
-                                visited.contains(pos.up())
-                            ) {
-                                queue.add(pos)
-                                lightCount++
-                                freeCount++
-                            }
-                        } else {
-                            if (blockedCount <= 3) {
-                                blockedCount++
-                            }
-                        }
-                    }
-                    if ((blockedCount == 3 && freeCount == 0) ||
-                        (blockedCount == 1 && freeCount == 2) ||
-                        (blockedCount == 2 && freeCount == 1)
-                    ) {
-                        edgeIterator++
-                        LOGGER.info("blocked: {} flee: {} current: {}", blockedCount, freeCount, current)
-                        edges.append(current)
+            if (nearestMainErrand != null) {
+                var start = 0
+                val ranges = mutableListOf<Pair<Int, Int>>()
+                for ((index, e) in mutableErrands.withIndex()) {
+                    if (e.cid == mainActionType) {
+                        ranges.add(Pair(start, index))
+                        start = index + 1
                     }
                 }
-                visited.add(current)
+                var inserted = false
+                for (range in ranges) {
+                    if (inserted) continue
+                    if (mutableErrands.subList(range.first, range.second).find { it.cid == errand.cid } == null) {
+                        mutableErrands.add(range.first, errand)
+                        inserted = true
+                    }
+                }
             }
-            queue.clear()
-            // ignore this the rest
-            // put lights check of get errands
-            if (edges.volume() >= lightCount) {
-                Response.NOT_ENOUGHT_LIGHT.send(player)
-                return null
+        }
+        capacity = mainErrands.count()
+        return mutableErrands
+    }
+
+    override fun getErrands(vid: Int): List<Errand> {
+        if (errands.isEmpty()) return emptyList()
+        val index = getResidentIndex(vid)
+        extractErrandsByIndex(index)?.let { return it }
+        return emptyList()
+    }
+
+    override fun updateErrands(world: World) {
+        val pickedErrands = mutableListOf<Errand>()
+        BlockIterator.CUBOID(region.lower, region.upper).forEach { pos ->
+            getAction(world.getBlockState(pos))?.let { action ->
+                pickedErrands.add(Errand(action, pos))
             }
-            LOGGER.info("> {}", lightCount)
-            edges.grow()
-            // use VOLUME_PER_RESIDENT field
-            if (edges.volume() < 125) {
-                Response.NOT_ENOUGHT_SPACE.send(player)
-                return null
+        }
+        val sortedErrands = sortErrands(pickedErrands)
+        errands.addAll(sortedErrands)
+    }
+
+    fun extractErrandsByIndex(index: Int): List<Errand>? {
+        val indicesOfOnes =
+            errands
+                .withIndex()
+                .filter { it.value.cid == Action.Type.SLEEP }
+                .map { it.index }
+
+        if (index <= 0 || index > indicesOfOnes.size) return null
+
+        val startIndex = if (index == 1) 0 else indicesOfOnes[index - 2] + 1
+        val endIndex = indicesOfOnes[index - 1]
+
+        return errands.subList(startIndex, endIndex + 1)
+    }
+
+    companion object {
+        enum class BuildingSet(
+            val set: Set<Action.Type>,
+        ) {
+            HOUSE(setOf(Action.Type.SLEEP, Action.Type.STORE, Action.Type.SIT)),
+            BARRACK(setOf(Action.Type.SLEEP)),
+        }
+
+        private fun getAction(state: BlockState): Action.Type? {
+            when (state.block) {
+                is BedBlock -> {
+                    if (state.get(BedBlock.PART) == BedPart.HEAD) return Action.Type.SLEEP else return null
+                }
+                is ChestBlock -> return Action.Type.STORE
+                is SlabBlock -> return Action.Type.SIT
+                // is FletcherBlock -> return Action.Type.YIELD
+                // is SmokerBlock -> return Action.Type.COOK
+                // is AnvilBlock -> return Action.Type.FORGE
+                // is GrindstoneBlock -> return Action.Type.REPAIR
+                // is AbstractCauldronBlock -> return Action.Type.FILL
+                // is BrewingStandBlock -> return Action.Type.BREW
             }
-            LOGGER.info("> {}", edges.volume())
-            return edges
+            return null
+        }
+
+        fun getBuildingType(
+            region: Region,
+            world: World,
+        ): StructureType? {
+            val set = mutableSetOf<Action.Type>()
+            val r = region.shrink()
+            BlockIterator.CUBOID(r.lower, r.upper).forEach { pos ->
+                getAction(world.getBlockState(pos))?.let { action ->
+                    set.add(action)
+                }
+            }
+            BuildingSet.values().forEach { building ->
+                if (set.containsAll(building.set)) {
+                    return StructureType.valueOf(building.name)
+                }
+            }
+            return null
         }
 
         fun createStructure(
@@ -150,18 +154,27 @@ class Building(
                     pos.offset(d.getOpposite())
                 }
 
-            getRegion(player, spos) // ?.let { region ->
+            BlockIterator.FLOOD_FILL(player.world, spos, BlockIterator.BUILDING_AVAILABLE_SPACE)?.let { (lightCount, edges) ->
+                val region = Region(pos, pos)
+                edges.forEach { edge ->
+                    region.append(edge)
+                }
 
-            // assignStructure(region, player.world)?.let { (type, errands) ->
-            //    Response.NEW_STRUCTURE.send(player, type.name)
-            //    val building = Building(type, region.lower, region.upper, errands.count())
-            //    building.errands.addAll(errands)
-            //    LOGGER.info("Capacity: {}", errands.count())
-            //    LOGGER.info("Errands: {}", errands)
-            //    return building
-            // }
-            // Response.NOT_ENOUGHT_FURNITURE.send(player)
-            // }
+                if (region.volume() >= lightCount) {
+                    Response.NOT_ENOUGHT_LIGHT.send(player)
+                    return null
+                }
+
+                if (region.grow().volume() < 125) {
+                    Response.NOT_ENOUGHT_SPACE.send(player)
+                    return null
+                }
+                getBuildingType(region, player.world)?.let { type ->
+                    Response.NEW_STRUCTURE.send(player, type.name)
+                    return Building(type, region.lower, region.upper, 0)
+                }
+            }
+            Response.NOT_ENOUGHT_FURNITURE.send(player)
             return null
         }
     }
