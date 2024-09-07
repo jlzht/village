@@ -154,7 +154,16 @@ class SettlementManager : PersistentState() {
             }
         }
 
-        // put these methods somewhere else
+        // URGENT: put these methods somewhere else
+        fun findNearestSettlementToPlayer(player: PlayerEntity): Settlement? {
+            val dim = getDimensionString(player.world.getDimensionEntry())
+            return getInstance()
+                .getSettlements()
+                .filter { it.dim == dim }
+                .filter { it.pos.getSquaredDistance(player.pos) < 16384.0 }
+                .minByOrNull { it.pos.getSquaredDistance(player.pos) }
+        }
+
         fun visitSettlement(entity: CustomVillagerEntity) {
             val dim = getDimensionString(entity.world.getDimensionEntry())
             getInstance()
@@ -192,9 +201,7 @@ class SettlementManager : PersistentState() {
             // add structure check to see if ID matches
             getInstance().findSettlement(entity.data.sid)?.let { settlement ->
                 settlement.getStructure(sid)?.let { structure ->
-                    LOGGER.info("found sstruee")
                     if (structure.getResidents().contains(entity.data.key)) {
-                        LOGGER.info("GOT HERE!")
                         entity.getErrandsManager().assignStructure(
                             sid,
                             { key -> structure.getErrands(key) },
@@ -209,9 +216,7 @@ class SettlementManager : PersistentState() {
             entity: CustomVillagerEntity,
             type: StructureType,
         ) {
-            LOGGER.info("got here")
             getInstance().findSettlement(entity.data.sid)?.let { settlement ->
-                LOGGER.info("in settlement: {}", settlement)
                 settlement.getStructureByType(type)?.let { (id, structure) ->
                     entity.getErrandsManager().assignStructure(
                         id,

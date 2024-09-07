@@ -1,5 +1,6 @@
 package com.village.mod
 
+import com.village.mod.command.VillageCommand
 import com.village.mod.entity.projectile.SimpleFishingBobberEntity
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.item.VillageItems
@@ -60,6 +61,7 @@ object Village : ModInitializer {
         )
 
     override fun onInitialize() {
+        VillageCommand.register()
         VillageItems.register()
         FabricDefaultAttributeRegistry.register(VILLAGER, CustomVillagerEntity.createCustomVillagerAttributes())
         // TODO: create a file to handle events, like what I did to WorldRenderEvents
@@ -73,7 +75,6 @@ object Village : ModInitializer {
             val settlements = manager.getSettlements()
 
             val entry = player.world.getDimensionEntry()
-
             SettlementManager.getDimensionString(entry)?.let { dim ->
                 settlements.filter { it.pos.getSquaredDistance(pos.toCenterPos()) < 16384.0f && it.dim == dim }.firstOrNull()?.let { settlement ->
                     // .find { it.allies.map { it.uuid }.contains(player.getUuid()) }?.let {

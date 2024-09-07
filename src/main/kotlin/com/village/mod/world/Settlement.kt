@@ -1,8 +1,8 @@
 package com.village.mod.world
 
-import com.village.mod.LOGGER
 import com.village.mod.action.Errand
 import com.village.mod.entity.village.CustomVillagerEntity
+import com.village.mod.network.SettlementDebugData
 import com.village.mod.screen.Response
 import com.village.mod.village.profession.ProfessionType
 import com.village.mod.village.structure.Building
@@ -214,6 +214,22 @@ class Settlement(
             nbtList.add(structureData)
         }
         return nbtList
+    }
+
+    fun getDebugData(): List<SettlementDebugData> {
+        val data = mutableListOf<SettlementDebugData>()
+        this.structures.forEach { structure ->
+            data.add(
+                SettlementDebugData(
+                    structure.key,
+                    structure.value.capacity,
+                    structure.value.MAX_CAPACITY,
+                    structure.value.region.lower,
+                    structure.value.region.upper,
+                ),
+            )
+        }
+        return data
     }
 
     companion object {
