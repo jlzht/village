@@ -3,20 +3,40 @@ package com.village.mod.village.structure
 import com.village.mod.LOGGER
 import com.village.mod.action.Errand
 import com.village.mod.util.Region
+import net.minecraft.nbt.NbtCompound
+import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
 
-// TODO:
-// - make errands field a set?
-sealed class Structure(
-    var capacity: Int,
-) {
-    abstract val MAX_CAPACITY: Int
-    abstract val VOLUME_PER_RESIDENT: Int
+sealed class Structure {
+    abstract val maxCapacity: Int
+    abstract val volumePerResident: Int
     abstract val type: StructureType
     abstract var region: Region
-
+    abstract val residents: MutableList<Int>
+    abstract var capacity: Int
+    var updatedCapacity: Int = 0 // gets new capacity in structure logic
+    var currentCapacity: Int = 0 // debugData needs this var
     val errands = mutableListOf<Errand>()
-    abstract val settlers: MutableList<Int>
+
+    fun updateCapacity() {
+        val newCapacity = updatedCapacity
+        LOGGER.info("CAPACITY {}", newCapacity)
+        currentCapacity =
+            when {
+                newCapacity < 1 -> 1
+                newCapacity > maxCapacity -> maxCapacity
+                else -> newCapacity
+            }
+        LOGGER.info("CURRENT CAPACITY {}", currentCapacity)
+
+        while (capacity > currentCapacity) {
+            LOGGER.info("ME REMOVING")
+            val lastIndex = residents.indexOfLast { it != -1 }
+            if (lastIndex != -1) {
+                residents.removeAt(lastIndex)
+            }
+        }
+    }
 
     fun hasErrands(): Boolean = errands.isNotEmpty()
 
@@ -24,33 +44,69 @@ sealed class Structure(
 
     abstract fun getErrands(vid: Int): List<Errand>?
 
-    fun showErrands() {
-        errands.forEach { e ->
-            LOGGER.info("Action:{} - Pos:{}", e.cid, e.pos)
-        }
-    }
-
-    fun isAvailable(): Boolean = settlers.count { it != -1 } <= capacity
+    fun isAvailable(): Boolean = capacity < maxCapacity
 
     fun addResident(vid: Int) {
-        settlers.set(settlers.indexOfFirst { it == -1 }, vid)
-    }
-
-    fun getResidentIndex(vid: Int): Int {
-        var i: Int = 1
-        for (settler in settlers) {
-            if (settler == vid) {
-                return i
-            } else {
-                i++
-            }
-        }
-        return 0
+        residents.set(residents.indexOfFirst { it == -1 }, vid)
     }
 
     fun removeResident(vid: Int) {
-        settlers.set(settlers.indexOf(vid), -1)
+        residents.set(residents.indexOf(vid), -1)
     }
 
-    fun getResidents(): List<Int> = settlers.filter { it != -1 }
+    fun getResidentIndex(vid: Int): Int = residents.indexOf(vid) + 1
+
+    @JvmName("filteredResidents")
+    fun getResidents(): List<Int> = residents.filter { it != -1 }
+
+    fun toNbt(): NbtCompound =
+        NbtCompound().apply {
+            putInt("StructureType", this@Structure.type.ordinal)
+            putInt("StructureCapacity", capacity)
+            putIntArray("StructureSettlers", getResidents())
+            putInt("StructureAreaLowerX", region.lower.x)
+            putInt("StructureAreaLowerY", region.lower.y)
+            putInt("StructureAreaLowerZ", region.lower.z)
+            putInt("StructureAreaUpperX", region.upper.x)
+            putInt("StructureAreaUpperY", region.upper.y)
+            putInt("StructureAreaUpperZ", region.upper.z)
+        }
+
+    companion object {
+        fun fromNbt(nbt: NbtCompound): Pair<Int, Structure>? {
+            val lower =
+                BlockPos(
+                    nbt.getInt("StructureAreaLowerX"),
+                    nbt.getInt("StructureAreaLowerY"),
+                    nbt.getInt("StructureAreaLowerZ"),
+                )
+            val upper =
+                BlockPos(
+                    nbt.getInt("StructureAreaUpperX"),
+                    nbt.getInt("StructureAreaUpperY"),
+                    nbt.getInt("StructureAreaUpperZ"),
+                )
+            val structure = getStructure(nbt.getInt("StructureType"), lower, upper)
+
+            structure?.let {
+                val key = nbt.getInt("StructureKey")
+                nbt.getIntArray("StructureSettlers").forEach { vid -> it.addResident(vid) }
+                return Pair(key, it)
+            }
+            return null
+        }
+
+        private fun getStructure(
+            structureType: Int,
+            lower: BlockPos,
+            upper: BlockPos,
+        ): Structure? =
+            when (structureType) {
+                StructureType.KITCHEN.ordinal -> Building(StructureType.KITCHEN, lower, upper)
+                StructureType.HOUSE.ordinal -> Building(StructureType.HOUSE, lower, upper)
+                StructureType.FARM.ordinal -> Farm(lower, upper)
+                StructureType.POND.ordinal -> Pond(lower, upper)
+                else -> null
+            }
+    }
 }

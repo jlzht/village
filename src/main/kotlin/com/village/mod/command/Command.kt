@@ -9,7 +9,6 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.minecraft.server.command.ServerCommandSource
 import net.minecraft.text.Text
 
-// TODO: make it more readable
 object VillageCommand {
     fun register() {
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
@@ -18,14 +17,14 @@ object VillageCommand {
                     .literal<ServerCommandSource>("settlement")
                     .then(
                         LiteralArgumentBuilder
-                            .literal<ServerCommandSource>("render")
+                            .literal<ServerCommandSource>("debug")
                             .then(
                                 RequiredArgumentBuilder
                                     .argument<ServerCommandSource, Boolean>("state", BoolArgumentType.bool())
                                     .executes { context ->
                                         context.source.player?.let { player ->
                                             val state = BoolArgumentType.getBool(context, "state")
-                                            SettlementManager.findNearestSettlementToPlayer(player)?.let { settlement ->
+                                            SettlementManager.findNearestSettlement(player)?.let { settlement ->
                                                 if (state) {
                                                     SettlementDebugDataPacket.sendToClient(player, settlement.getDebugData())
                                                     context.source.sendMessage(

@@ -10,12 +10,16 @@ import net.minecraft.world.World
 class Campfire(
     val lower: BlockPos,
     val upper: BlockPos,
-) : Structure(1) {
-    override val MAX_CAPACITY: Int = 3
-    override val VOLUME_PER_RESIDENT: Int = 5
+) : Structure() {
+    override val maxCapacity: Int = 4
+    override val volumePerResident: Int = 32
     override var type: StructureType = StructureType.CAMPFIRE
     override var region: Region = Region(lower, upper)
-    override val settlers: MutableList<Int> = MutableList(MAX_CAPACITY) { -1 }
+    override val residents: MutableList<Int> = MutableList(maxCapacity) { -1 }
+    override var capacity: Int
+        get() = getResidents().size
+        set(value) {
+        }
 
     override fun getErrands(vid: Int): List<Errand>? = null
 

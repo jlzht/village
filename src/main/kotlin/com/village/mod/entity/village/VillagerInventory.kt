@@ -28,6 +28,11 @@ class VillagerInventory(
     private val armor = DefaultedList.ofSize(4, ItemStack.EMPTY)
     private val fixed = DefaultedList.ofSize(2, ItemStack.EMPTY) // extra slots for frequent consumable stuff E.g arrows, emeralds
     private val merged: List<DefaultedList<ItemStack>> = ImmutableList.of(this.held, this.main, this.fixed, this.armor)
+    private var updater: (() -> Unit)? = null
+
+    fun setUpdater(callback: (() -> Unit)?) {
+        this.updater = callback
+    }
 
     fun setArmorField(
         id: Int,
@@ -54,7 +59,7 @@ class VillagerInventory(
             if (!canInsert) return
             villager.triggerItemPickedUpByEntityCriteria(item)
             val originalCount = itemStack.count
-            // Horrable
+            // BAD CODE
             val remainingStack =
                 if (ItemPredicate.ARROW(item.stack.item)) {
                     this.specialItemHandle(itemStack)
@@ -190,6 +195,7 @@ class VillagerInventory(
         if (itemStack.isEmpty()) {
             return ItemStack.EMPTY
         }
+        this.markDirty()
         return itemStack
     }
 
@@ -224,15 +230,7 @@ class VillagerInventory(
         for (k in 0 until field.size) {
             val itemStack = this.getStack(k)
             if (!ItemStack.canCombine(itemStack, stack)) continue
-            // this.transfer(itemStack, stack)
-            val i = Math.min(this.getMaxCountPerStack(), itemStack.getMaxCount())
-            val j = Math.min(stack.getCount(), i - itemStack.getCount())
-            if (j > 0) {
-                itemStack.increment(j)
-                stack.decrement(j)
-                this.markDirty()
-            }
-            this.markDirty()
+            this.transfer(stack, itemStack)
             if (!stack.isEmpty) continue
             return
         }
@@ -243,7 +241,7 @@ class VillagerInventory(
         amount: Int,
     ): ItemStack {
         val itemStack = Inventories.splitStack(this.main, slot, amount)
-        if (!itemStack.isEmpty) {
+        if (!itemStack.isEmpty()) {
             this.markDirty()
         }
         return itemStack
@@ -368,8 +366,9 @@ class VillagerInventory(
         this.clear()
     }
 
-    // find usage for listeners
-    override fun markDirty() {}
+    override fun markDirty() {
+        updater?.invoke()
+    }
 
     override fun canPlayerUse(player: PlayerEntity): Boolean = false
 
@@ -397,6 +396,5 @@ class VillagerInventory(
         for (list in merged) {
             list.clear()
         }
-        this.markDirty()
     }
 }

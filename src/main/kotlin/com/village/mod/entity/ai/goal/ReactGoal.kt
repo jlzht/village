@@ -1,9 +1,10 @@
 package com.village.mod.entity.ai.goal
 
+import com.village.mod.LOGGER
 import com.village.mod.action.Action
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.util.Finder
-import com.village.mod.village.profession.Guard
+import com.village.mod.village.profession.Combatant
 import net.minecraft.entity.ai.goal.Goal
 import net.minecraft.registry.tag.FluidTags
 import java.util.EnumSet
@@ -11,8 +12,6 @@ import java.util.EnumSet
 class ReactGoal(
     private val entity: CustomVillagerEntity,
 ) : Goal() {
-    private var seeingTargetTicker: Int = 0
-
     init {
         this.setControls(EnumSet.of(Goal.Control.TARGET))
     }
@@ -36,51 +35,57 @@ class ReactGoal(
                 entity.target = null
                 return
             }
-            val errand = entity.getErrandsManager().peek()
+            val peek = entity.getErrandsManager().peek()
             if (
-                errand == null ||
+                peek == null ||
                 (
-                    errand.cid != Action.Type.ATTACK &&
-                        errand.cid != Action.Type.CHARGE &&
-                        errand.cid != Action.Type.AIM &&
-                        errand.cid != Action.Type.FLEE &&
-                        errand.cid != Action.Type.LOOK &&
-                        errand.cid != Action.Type.DEFEND
+                    peek.cid != Action.Type.ATTACK &&
+                        peek.cid != Action.Type.CHARGE &&
+                        peek.cid != Action.Type.AIM &&
+                        peek.cid != Action.Type.FLEE &&
+                        peek.cid != Action.Type.LOOK &&
+                        peek.cid != Action.Type.DEFEND
                 )
             ) {
                 if (entity.isFighting()) {
-                    if (entity.getProfession() is Guard && entity.isAttacking()) {
-                        val distanceSquared = entity.squaredDistanceTo(target)
-                        if (!(
-                                distanceSquared >= 12 &&
-                                    (
-                                        entity.getErrandsManager().add(
-                                            Action.Type.AIM,
-                                        ) ||
-                                            entity.getErrandsManager().add(Action.Type.CHARGE)
-                                    )
-                            )
-                        ) {
-                            val attack = entity.getErrandsManager().add(Action.Type.ATTACK)
-                            var defend: Boolean = false
-                            if (distanceSquared <= 4) {
-                                defend = entity.getErrandsManager().add(Action.Type.DEFEND)
-                            }
-                            if (!attack || entity.random.nextInt() == 0) {
-                                if (!defend || entity.random.nextInt() == 0) {
-                                    entity.setAttacking(false)
-                                    if (!entity.getErrandsManager().has(Action.Type.FLEE)) {
-                                        Finder.findFleeBlock(entity, target)?.let { block ->
-                                            entity.getErrandsManager().add(
-                                                block,
-                                            )
-                                        }
+                    if (entity.getProfession() is Combatant && entity.isAttacking()) {
+                        val distance = entity.squaredDistanceTo(target)
+                        val errandsManager = entity.getErrandsManager()
+                        LOGGER.info("-> {}", distance)
+                        val cache = (entity.getProfession() as Combatant).cache
+                        val canDamage =
+                            when {
+                                distance >= 16 -> {
+                                    cache[Action.Type.CHARGE]?.takeIf { it }?.let { errandsManager.add(Action.Type.CHARGE) }
+                                        ?: cache[Action.Type.AIM]?.takeIf { it }?.let { errandsManager.add(Action.Type.AIM) }
+                                        ?: cache[Action.Type.ATTACK]?.takeIf { it }?.let { errandsManager.add(Action.Type.ATTACK) }
+                                        ?: false
+                                }
+                                distance <= 5 -> {
+                                    if (entity.random.nextInt(3) == 0) { // 33% chance of defending
+                                        cache[Action.Type.DEFEND]?.takeIf { it }?.let { errandsManager.add(Action.Type.DEFEND) }
+                                            ?: cache[Action.Type.ATTACK]?.takeIf { it }?.let { errandsManager.add(Action.Type.ATTACK) }
+                                            ?: false
+                                    } else {
+                                        cache[Action.Type.ATTACK]?.takeIf { it }?.let { errandsManager.add(Action.Type.ATTACK) }
+                                            ?: false
                                     }
                                 }
+                                else -> false
                             }
+                        LOGGER.info("CANT DAMAGE!")
+                        if (!canDamage) {
+                            entity.setAttacking(false)
+                            // TODO: create RETREAT and STRIFE actions
+                            if (!errandsManager.has(Action.Type.FLEE)) {
+                                Finder.findFleeBlock(entity, target)?.let { block ->
+                                    errandsManager.add(block)
+                                }
+                            }
+                            // low health
                         }
                     } else {
-                        // TODO: create Retreat action (find new position based on target looking angle)
+                        entity.setAttacking(false)
                         if (!entity.getErrandsManager().has(Action.Type.FLEE)) {
                             Finder.findFleeBlock(entity, target)?.let { block ->
                                 entity.getErrandsManager().add(
@@ -90,14 +95,10 @@ class ReactGoal(
                         }
                     }
                 } else {
-                    // tweak this
-                    if (entity.random.nextInt(10) == 0) {
+                    if (entity.random.nextInt(20) == 0) {
                         if (!entity.getErrandsManager().has(Action.Type.LOOK)) {
                             entity.getErrandsManager().add(Action.Type.LOOK)
                         }
-                        return
-                    } else {
-                        // Fail look logic if needed
                     }
                 }
             }

@@ -15,13 +15,17 @@ import net.minecraft.world.World
 class Pond(
     lower: BlockPos,
     upper: BlockPos,
-) : Structure(1) {
-    override val MAX_CAPACITY: Int = 4
-    override val VOLUME_PER_RESIDENT: Int = 32
+) : Structure() {
+    override val maxCapacity: Int = 4
+    override val volumePerResident: Int = 32
     override var type: StructureType = StructureType.POND
 
     override var region: Region = Region(lower, upper)
-    override val settlers: MutableList<Int> = MutableList(MAX_CAPACITY) { -1 }
+    override val residents: MutableList<Int> = MutableList(maxCapacity) { -1 }
+    override var capacity: Int
+        get() = getResidents().size
+        set(value) {
+        }
 
     override fun updateErrands(world: World) {
         // add method to get Y height of region
@@ -54,7 +58,7 @@ class Pond(
         ): Structure? {
             val world = player.world
             // This check will be removed in the future
-            val check = BlockIterator.BOTTOM(pos).all { world.getBlockState(it).isSolid }
+            val check = BlockIterator.BOTTOM(pos).all { world.getBlockState(it).isSolid } && world.getBlockState(pos.up()).isAir
             if (!check) {
                 LOGGER.info("BLOCKS BELOW MUST BE SOLID")
                 // TODO: implement response

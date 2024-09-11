@@ -9,7 +9,7 @@ import com.village.mod.entity.ai.pathing.VillagerNavigation
 import com.village.mod.screen.TradingScreenHandler
 import com.village.mod.village.profession.Profession
 import com.village.mod.village.profession.ProfessionType
-import com.village.mod.world.SettlementManager
+import com.village.mod.world.SettlementAccessor
 import net.fabricmc.fabric.api.screenhandler.v1.ExtendedScreenHandlerFactory
 import net.minecraft.entity.Entity
 import net.minecraft.entity.EntityData
@@ -45,11 +45,11 @@ import net.minecraft.world.LocalDifficulty
 import net.minecraft.world.ServerWorldAccess
 import net.minecraft.world.World
 
-data class VillagerData(
-    var key: Int = -1,
-    var sid: Int = -1,
-    var dim: String = "i",
-)
+// data class VillagerData(
+//    var key: Int = -1,
+//    var sid: Int = -1,
+//    var dim: String = "i",
+// )
 
 // TODO:
 // - rename CustomVillagerEntity to AbstractVillagerEntity
@@ -66,7 +66,7 @@ class CustomVillagerEntity(
     val inventory: VillagerInventory = VillagerInventory(this)
     private lateinit var profession: Profession // do not use lateinit
 
-    val data = VillagerData()
+    // val data = VillagerData()
 
     init {
         this.getNavigation().setCanSwim(false)
@@ -90,7 +90,7 @@ class CustomVillagerEntity(
             spawnReason == SpawnReason.DISPENSER
         ) {
         }
-        SettlementManager.setProfession(this)
+        SettlementAccessor.setProfession(this)
         return super.initialize(world, difficulty, spawnReason, entityData, entityNbt)
     }
 
@@ -112,7 +112,7 @@ class CustomVillagerEntity(
 
     override fun createNavigation(world: World): EntityNavigation = VillagerNavigation(this, world)
 
-    fun hasVillage(): Boolean = this.data.key != -1 && this.data.sid != -1
+    // this.data.key != -1 && this.data.sid != -1
 
     override fun wakeUp() {
         super.wakeUp()
@@ -316,8 +316,8 @@ class CustomVillagerEntity(
     override fun onDeath(damageSource: DamageSource) {
         LOGGER.info("Villager {} died, message: {}", this as Any, damageSource.getDeathMessage(this).string)
         this.inventory.dropAll()
-        if (hasVillage()) {
-            SettlementManager.leaveSettlement(this)
+        if (this.errandsManager.hasSettlement()) {
+            SettlementAccessor.leaveSettlement(this)
         }
         super.onDeath(damageSource)
     }
@@ -340,24 +340,24 @@ class CustomVillagerEntity(
         // add check for first spawn
         this.setProfession(ProfessionType.values()[nbt.getInt("VillagerProfession")])
         if (nbt.contains("SettlementID", NbtElement.INT_TYPE.toInt())) {
-            this.data.sid = nbt.getInt("SettlementID")
-            this.data.key = nbt.getInt("SettlementKey")
-            this.data.dim = nbt.getString("SettlementDim")
+            LOGGER.info("GHT>> HERE")
+            this.getErrandsManager().free = nbt.getInt("SettlementID")
+            this.getErrandsManager().self = nbt.getInt("SettlementKey")
+            this.getErrandsManager().sdim = nbt.getByte("SettlementDim")
+            this.getErrandsManager().home = nbt.getInt("HomeStructure")
+            this.getErrandsManager().work = nbt.getInt("WorkStructure")
         }
-
-        this.getErrandsManager().homeID = nbt.getInt("HomeStructure")
-        this.getErrandsManager().workID = nbt.getInt("WorkStructure")
     }
 
     override fun writeCustomDataToNbt(nbt: NbtCompound) {
         super.writeCustomDataToNbt(nbt)
         nbt.put(INVENTORY_KEY, this.inventory.writeNbt())
         nbt.putInt("VillagerProfession", this.profession.type.ordinal)
-        nbt.putInt("SettlementID", this.data.sid)
-        nbt.putInt("SettlementKey", this.data.key)
-        nbt.putInt("SettlementDim", this.data.key)
-        nbt.putInt("HomeStructure", this.getErrandsManager().homeID)
-        nbt.putInt("WorkStructure", this.getErrandsManager().workID)
+        nbt.putInt("SettlementID", this.getErrandsManager().free)
+        nbt.putInt("SettlementKey", this.getErrandsManager().self)
+        nbt.putByte("SettlementDim", this.getErrandsManager().sdim)
+        nbt.putInt("HomeStructure", this.getErrandsManager().home)
+        nbt.putInt("WorkStructure", this.getErrandsManager().work)
     }
 
     companion object {

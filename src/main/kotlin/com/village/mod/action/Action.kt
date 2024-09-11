@@ -1,6 +1,5 @@
 package com.village.mod.action
 
-import com.village.mod.LOGGER
 import com.village.mod.entity.projectile.SimpleFishingBobberEntity
 import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.item.ItemPredicate
@@ -19,6 +18,8 @@ import net.minecraft.entity.EquipmentSlot
 import net.minecraft.item.BoneMealItem
 import net.minecraft.item.CrossbowItem
 import net.minecraft.item.Items
+import net.minecraft.sound.SoundCategory
+import net.minecraft.sound.SoundEvents
 import net.minecraft.util.Hand
 import net.minecraft.util.math.BlockPos
 
@@ -28,6 +29,11 @@ data class Errand(
 )
 
 typealias Input = (entity: CustomVillagerEntity, pos: BlockPos?) -> Byte
+
+// sealed class Combat : Action()
+// sealed class Manage : Action()
+// sealed class Change : Action()
+// sealed class Toward : Action()
 
 sealed class Action {
     abstract val scan: Input // scan if errand can be picked,
@@ -49,10 +55,10 @@ sealed class Action {
 
     object Pick : Action() {
         override val scan: Input = { _, _ -> 3 }
-        override val radiusToAct: Float = 2.0f
+        override val radiusToAct: Float = 2.3f
         override val radiusToLook: Float = 5.0f
-        override val ticksToTest: Int = 1
-        override val ticksToExec: Int = 1
+        override val ticksToTest: Int = 5
+        override val ticksToExec: Int = 2
     }
 
     object Sleep : Action() {
@@ -79,6 +85,7 @@ sealed class Action {
             val stack = e.getStackInHand(Hand.MAIN_HAND)
             e.swingHand(Hand.MAIN_HAND)
             e.world.setBlockState(p, Blocks.FARMLAND.defaultState, Block.NOTIFY_NEIGHBORS)
+            e.world.playSound(e, p, SoundEvents.ITEM_HOE_TILL, SoundCategory.BLOCKS, 1.0f, 1.0f)
             stack.damage(1, e, { j -> j.sendToolBreakStatus(Hand.MAIN_HAND) })
             1
         }
@@ -143,7 +150,7 @@ sealed class Action {
             (e.world.getBlockState(p!!.up()).block is CropBlock).toByte()
         }
         override val exec: Input = { entity, pos ->
-            entity.world.breakBlock(pos, true)
+            entity.world.breakBlock(pos!!.up(), true)
             entity.swingHand(Hand.MAIN_HAND)
             1
         }
@@ -224,7 +231,7 @@ sealed class Action {
     }
 
     object Sit : Action() {
-        override val scan: Input = { _, _ -> 6 }
+        override val scan: Input = { _, _ -> -1 }
 
         override val test: Input = { e, p ->
             var ret: Byte = 0
@@ -291,7 +298,7 @@ sealed class Action {
     }
 
     object Store : Action() {
-        override val scan: Input = { _, _ -> 9 }
+        override val scan: Input = { _, _ -> -1 }
         override val exec: Input = { e, _ ->
             e.target = null
             1
@@ -363,7 +370,7 @@ sealed class Action {
             e.target?.let { t ->
                 if (t.isAlive) {
                     e.swingHand(Hand.MAIN_HAND)
-                    if (e.squaredDistanceTo(t) <= 3.5f) {
+                    if (e.squaredDistanceTo(t) <= 4.0f) {
                         e.tryAttack(t)
                     }
                 }
@@ -392,14 +399,17 @@ sealed class Action {
     }
 
     object Open : Action() {
-        override val scan: Input = { _, _ -> 9 }
+        override val scan: Input = { _, _ -> 10 }
         override val test: Input = { e, p ->
             (e.world.getBlockState(p).getBlock() is DoorBlock).toByte()
         }
         override val exec: Input = { e, p ->
             val state = e.world.getBlockState(p)
-            (state.getBlock() as DoorBlock).setOpen(e, e.getWorld(), state, p, true)
-            e.swingHand(Hand.MAIN_HAND)
+            val block = (state.getBlock() as DoorBlock)
+            if (!block.isOpen(state)) {
+                block.setOpen(e, e.getWorld(), state, p, true)
+                e.swingHand(Hand.MAIN_HAND)
+            }
             1
         }
         override val eval: Input = { e, p ->
@@ -425,19 +435,19 @@ sealed class Action {
         override val scan: Input = { _, _ -> 9 }
 
         override val exec: Input = { e, p ->
-            p?.let {
-                BlockIterator.NEIGHBOURS(p).find { e.world.getBlockState(it).getBlock() is DoorBlock }?.let { t ->
-                    val state = e.world.getBlockState(p.add(t))
-                    if (state.getBlock() is DoorBlock) {
-                        (state.getBlock() as DoorBlock).setOpen(e, e.getWorld(), state, p.add(t), false)
-                        e.swingHand(Hand.MAIN_HAND)
-                    }
+            BlockIterator.NEIGHBOURS(p!!).find { e.world.getBlockState(it).getBlock() is DoorBlock }?.let { t ->
+                val state = e.world.getBlockState(t)
+                if (state.getBlock() is DoorBlock) {
+                    (state.getBlock() as DoorBlock).setOpen(e, e.getWorld(), state, t, false)
+                    e.swingHand(Hand.MAIN_HAND)
                 }
             }
             1
         }
 
-        override val radiusToAct: Float = 0.5f
+        override val radiusToAct: Float = 2.3f
+        override val ticksToExec: Int = 5
+        override val ticksToTest: Int = 2
     }
 
     object Defend : Action() {
@@ -507,6 +517,17 @@ sealed class Action {
         override val radiusToLook: Float = 150.0f
     }
 
+    object Attach : Action() {
+        override val scan: Input = { _, _ -> 9 }
+        override val exec: Input = { e, p ->
+            1
+        }
+        override val ticksToExec: Int = 1
+        override val ticksToTest: Int = 1
+        override val radiusToAct: Float = 0.0f
+        override val radiusToLook: Float = 0.0f
+    }
+
     enum class Type {
         PICK,
         SLEEP,
@@ -530,6 +551,9 @@ sealed class Action {
         OPEN,
         CLOSE,
         DEFEND,
+        ATTACH,
+        DETACH,
+        YIELD, // placeholder action
     }
 
     companion object {
@@ -557,6 +581,7 @@ sealed class Action {
                 Type.CLOSE to Close,
                 Type.DEFEND to Defend,
                 Type.AIM to Aim,
+                Type.YIELD to Pick,
             )
 
         fun get(type: Type): Action = map[type] ?: Move

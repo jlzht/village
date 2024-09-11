@@ -10,6 +10,7 @@ import net.minecraft.block.BedBlock
 import net.minecraft.block.BlockState
 import net.minecraft.block.ChestBlock
 import net.minecraft.block.DoorBlock
+import net.minecraft.block.FletchingTableBlock
 import net.minecraft.block.SlabBlock
 import net.minecraft.block.enums.BedPart
 import net.minecraft.entity.player.PlayerEntity
@@ -20,17 +21,22 @@ class Building(
     override var type: StructureType,
     lower: BlockPos,
     upper: BlockPos,
-    capacity: Int,
-) : Structure(capacity) {
-    override val MAX_CAPACITY: Int = 3
-    override val VOLUME_PER_RESIDENT: Int = 5
+) : Structure() {
+    override val maxCapacity: Int = 4
+    override val volumePerResident: Int = 32
     override var region: Region = Region(lower, upper)
-    override val settlers: MutableList<Int> = MutableList(MAX_CAPACITY) { -1 }
+
+    override val residents: MutableList<Int> = MutableList(maxCapacity) { -1 }
+    override var capacity: Int
+        get() = getResidents().size
+        set(value) {
+        }
 
     private fun sortErrands(foundErrands: List<Errand>): List<Errand> {
         val mainActionType = Action.Type.SLEEP // Define the main action type for sorting
         val mainErrands = foundErrands.filter { it.cid == mainActionType }
         val mutableErrands = mainErrands.toMutableList()
+        updatedCapacity = mainErrands.count()
 
         val remainingErrands = foundErrands.filter { it.cid != mainActionType }.toMutableList()
 
@@ -64,9 +70,13 @@ class Building(
     }
 
     override fun getErrands(vid: Int): List<Errand> {
+        // add dettach errand if structure dont have vid in residents!
         if (errands.isEmpty()) return emptyList()
         val index = getResidentIndex(vid)
-        extractErrandsByIndex(index)?.let { return it }
+        extractErrandsByIndex(index)?.let {
+            LOGGER.info("{}", it)
+            return it
+        }
         return emptyList()
     }
 
@@ -79,6 +89,8 @@ class Building(
         }
         val sortedErrands = sortErrands(pickedErrands)
         errands.addAll(sortedErrands)
+        LOGGER.info("Errands: {}", errands)
+        this.updateCapacity()
     }
 
     fun extractErrandsByIndex(index: Int): List<Errand>? {
@@ -101,7 +113,7 @@ class Building(
             val set: Set<Action.Type>,
         ) {
             HOUSE(setOf(Action.Type.SLEEP, Action.Type.STORE, Action.Type.SIT)),
-            BARRACK(setOf(Action.Type.SLEEP)),
+            BARRACK(setOf(Action.Type.SLEEP, Action.Type.YIELD)),
         }
 
         private fun getAction(state: BlockState): Action.Type? {
@@ -111,7 +123,7 @@ class Building(
                 }
                 is ChestBlock -> return Action.Type.STORE
                 is SlabBlock -> return Action.Type.SIT
-                // is FletcherBlock -> return Action.Type.YIELD
+                is FletchingTableBlock -> return Action.Type.YIELD
                 // is SmokerBlock -> return Action.Type.COOK
                 // is AnvilBlock -> return Action.Type.FORGE
                 // is GrindstoneBlock -> return Action.Type.REPAIR
@@ -126,12 +138,13 @@ class Building(
             world: World,
         ): StructureType? {
             val set = mutableSetOf<Action.Type>()
-            val r = region.shrink()
-            BlockIterator.CUBOID(r.lower, r.upper).forEach { pos ->
+            //val r = region.shrink()
+            BlockIterator.CUBOID(region.lower, region.upper).forEach { pos ->
                 getAction(world.getBlockState(pos))?.let { action ->
                     set.add(action)
                 }
             }
+            LOGGER.info("Set: {}", set)
             BuildingSet.values().forEach { building ->
                 if (set.containsAll(building.set)) {
                     return StructureType.valueOf(building.name)
@@ -155,8 +168,9 @@ class Building(
                 }
 
             BlockIterator.FLOOD_FILL(player.world, spos, BlockIterator.BUILDING_AVAILABLE_SPACE)?.let { (lightCount, edges) ->
-                val region = Region(pos, pos)
+                val region = Region(spos, spos)
                 edges.forEach { edge ->
+                    LOGGER.info("-> {}", edge)
                     region.append(edge)
                 }
 
@@ -171,7 +185,7 @@ class Building(
                 }
                 getBuildingType(region, player.world)?.let { type ->
                     Response.NEW_STRUCTURE.send(player, type.name)
-                    return Building(type, region.lower, region.upper, 0)
+                    return Building(type, region.lower, region.upper)
                 }
             }
             Response.NOT_ENOUGHT_FURNITURE.send(player)

@@ -2,7 +2,7 @@ package com.village.mod.entity.ai.goal
 
 import com.village.mod.action.Action
 import com.village.mod.entity.village.CustomVillagerEntity
-import com.village.mod.village.profession.Guard
+import com.village.mod.village.profession.Combatant
 import net.minecraft.entity.ItemEntity
 import net.minecraft.entity.LivingEntity
 import net.minecraft.entity.ai.goal.Goal
@@ -32,7 +32,7 @@ class PercieveGoal(
             entity.getRecentDamageSource()?.let { damageSource ->
                 val attacker = damageSource.getAttacker()
                 if (attacker is LivingEntity) {
-                    if (entity.getProfession() is Guard) {
+                    if (entity.getProfession() is Combatant) {
                         if (!(target is PlayerEntity && target.isCreative)) {
                             entity.setAttacking(true)
                         }
@@ -109,7 +109,7 @@ class PercieveGoal(
                             else -> entity.setTarget(it)
                         }
                         if (entity.isFighting()) return
-                        if (entity.random.nextInt(10) != 0) return // no danger, so it tries to pickup nearby items
+                        if (entity.random.nextInt(5) != 0) return // no danger, so it tries to pickup nearby items
                     }
 
                 if (!entity.getErrandsManager().has(Action.Type.PICK)) {

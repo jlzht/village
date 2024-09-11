@@ -1,6 +1,8 @@
 package com.village.mod.network
 
 import com.village.mod.MODID
+import com.village.mod.action.Action
+import com.village.mod.action.Errand
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
 import net.minecraft.network.PacketByteBuf
@@ -14,6 +16,7 @@ data class SettlementDebugData(
     val maxCapacity: Int,
     val lower: BlockPos,
     val upper: BlockPos,
+    val errands: List<Errand>
 )
 
 data class SettlementDebugDataPacket(
@@ -32,11 +35,17 @@ data class SettlementDebugDataPacket(
                 buf.writeInt(data.maxCapacity)
                 buf.writeBlockPos(data.lower)
                 buf.writeBlockPos(data.upper)
+                buf.writeInt(data.errands.size)
+                data.errands.forEach { errand ->
+                    buf.writeInt(errand.cid.ordinal)
+                    buf.writeBlockPos(errand.pos)
+                }
             }
         }
 
         fun decode(buf: PacketByteBuf): SettlementDebugDataPacket {
             val data = mutableListOf<SettlementDebugData>()
+            val types = Action.Type.values()
 
             while (buf.isReadable) {
                 val id = buf.readInt()
@@ -44,7 +53,14 @@ data class SettlementDebugDataPacket(
                 val maxCapacity = buf.readInt()
                 val lower = buf.readBlockPos()
                 val upper = buf.readBlockPos()
-                data.add(SettlementDebugData(id, capacity, maxCapacity, lower, upper))
+                val size = buf.readInt()
+                val errands = ArrayList<Errand>()
+                repeat(size) {
+                    val cid = buf.readInt()
+                    val pos = buf.readBlockPos()
+                    errands.add(Errand(types[cid], pos))
+                }
+                data.add(SettlementDebugData(id, capacity, maxCapacity, lower, upper, errands))
             }
             return SettlementDebugDataPacket(data)
         }

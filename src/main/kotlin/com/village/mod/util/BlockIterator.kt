@@ -1,6 +1,5 @@
 package com.village.mod.util
 
-import com.village.mod.LOGGER
 import net.minecraft.block.BlockState
 import net.minecraft.block.Blocks
 import net.minecraft.block.HorizontalFacingBlock
@@ -133,7 +132,6 @@ object BlockIterator {
             if (!visited.contains(current)) {
                 iterations++
                 if (edgesCount >= 32 || iterations >= 512) {
-                    LOGGER.info("TRIGGERED")
                     break
                 }
                 var blockedCount = 0

@@ -1,6 +1,5 @@
 package com.village.mod.village.structure
 
-import com.village.mod.LOGGER
 import com.village.mod.action.Action
 import com.village.mod.action.Errand
 import com.village.mod.screen.Response
@@ -16,30 +15,31 @@ import net.minecraft.world.World
 class Farm(
     val lower: BlockPos,
     val upper: BlockPos,
-    capacity: Int,
-) : Structure(capacity) {
-    override val MAX_CAPACITY: Int = 3
-    override val VOLUME_PER_RESIDENT: Int = 5
+) : Structure() {
+    override val maxCapacity: Int = 4
+    override val volumePerResident: Int = 25
     override var type: StructureType = StructureType.FARM
     override var region: Region = Region(lower, upper)
-    override val settlers: MutableList<Int> = MutableList(MAX_CAPACITY) { -1 }
+    override val residents: MutableList<Int> = MutableList(maxCapacity) { -1 }
+    override var capacity: Int
+        get() = getResidents().size
+        set(value) {
+        }
 
     override fun updateErrands(world: World) {
         BlockIterator.CUBOID(region.lower.add(-1, 0, -1), region.upper.add(1, 0, 1)).forEach { pos ->
             getFarmAction(pos, world)?.let { action ->
-                LOGGER.info("| Action: {}, Pos: {}", action, pos)
                 if (!region.contains(pos)) {
                     region.append(pos)
-                    LOGGER.info("New volume: {}", region.volume())
                 }
-                val apos = if (action == Action.Type.HARVEST) pos.up() else pos
-                val e = Errand(action, apos)
+                val e = Errand(action, pos)
                 if (!errands.contains(e)) {
-                    LOGGER.info("Already have!")
+                    errands.add(e)
                 }
-                errands.add(e)
             }
         }
+        updatedCapacity = region.volume() / volumePerResident
+        updateCapacity()
     }
 
     override fun getErrands(vid: Int): List<Errand>? {
@@ -55,7 +55,6 @@ class Farm(
         world: World,
     ): Action.Type? {
         val block = world.getBlockState(pos)
-        LOGGER.info("--{}", block)
         if (block.isOf(Blocks.FARMLAND) && block.get(FarmlandBlock.MOISTURE) >= 5) {
             if (world.getBlockState(pos.up()).isOf(Blocks.AIR)) {
                 return Action.Type.PLANT
@@ -65,9 +64,11 @@ class Farm(
                 if (upBlock is CropBlock) {
                     if (upBlock.isMature(up)) {
                         return Action.Type.HARVEST
-                    } else {
-                        return Action.Type.POWDER
                     }
+                    // think more about this
+                    // else {
+                    //    return Action.Type.POWDER
+                    // }
                 }
             }
         }
@@ -117,7 +118,7 @@ class Farm(
                 world.getBlockState(pos.south().east()).isOf(Blocks.FARMLAND) ||
                 world.getBlockState(pos.south().west()).isOf(Blocks.FARMLAND)
             ) {
-                val farm = Farm(pos, pos, 1)
+                val farm = Farm(pos, pos)
                 Response.NEW_STRUCTURE.send(player, farm.type.name)
                 return farm
             } else {

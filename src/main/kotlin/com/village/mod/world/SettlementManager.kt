@@ -1,10 +1,8 @@
 package com.village.mod.world
 
 import com.village.mod.LOGGER
-import com.village.mod.action.Action
-import com.village.mod.entity.village.CustomVillagerEntity
 import com.village.mod.screen.Response
-import com.village.mod.village.structure.StructureType
+import net.minecraft.entity.LivingEntity
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.nbt.NbtCompound
 import net.minecraft.nbt.NbtElement
@@ -48,10 +46,9 @@ class SettlementManager : PersistentState() {
             }
 
             Settlement(id, name, pos, dim).let {
-                LOGGER.info("Add settlement: {}", it)
                 settlements.add(it)
+                it.allies[player.getUuid()] = 50
                 Response.NEW_SETTLEMENT.send(player, name)
-                it.allies.add(PlayerDataField(50, player.getUuid()))
                 return it
             }
         } ?: run { return null } // notifies player about invalid dimension
@@ -82,18 +79,17 @@ class SettlementManager : PersistentState() {
         return nbtList
     }
 
+    var ticksToUpdate: Int = 300
+
     // TODO: find of checks to skip settlement ticking
     fun tick() {
         settlements.forEach { settlement ->
-            LOGGER.info("Settlement: {}", settlement.name)
             SettlementManager.getWorld(settlement.dim)?.let { world ->
                 if (world.isChunkLoaded(settlement.pos)) {
-                    LOGGER.info("> is loaded")
                     settlement.structures.forEach { structure ->
                         if (!structure.value.hasErrands()) {
                             structure.value.updateErrands(world)
-                            LOGGER.info("Structure: {}", structure.value.type)
-                            structure.value.showErrands()
+                            this.markDirty()
                         }
                     }
                 }
@@ -101,6 +97,8 @@ class SettlementManager : PersistentState() {
         }
     }
 
+    // add debug methods
+    // add command to show loaded settlements
     companion object {
         fun createFromNbt(tag: NbtCompound): SettlementManager {
             val state = SettlementManager()
@@ -126,11 +124,11 @@ class SettlementManager : PersistentState() {
         fun getInstance() = instance
 
         // easy access to dimensions
-        private val worlds = mutableMapOf<String, ServerWorld>()
+        private val worlds = mutableMapOf<Byte, ServerWorld>()
 
-        fun getWorld(string: String) = worlds[string]
+        fun getWorld(id: Byte) = worlds[id]
 
-        fun getWorlds(): MutableMap<String, ServerWorld> = worlds
+        fun getWorlds(): MutableMap<Byte, ServerWorld> = worlds
 
         fun setWorld(
             entry: RegistryEntry<DimensionType>,
@@ -145,97 +143,24 @@ class SettlementManager : PersistentState() {
             instance.tick()
         }
 
-        fun getDimensionString(entry: RegistryEntry<DimensionType>): String? {
+        fun getDimensionString(entry: RegistryEntry<DimensionType>): Byte? {
             return when {
-                entry.matchesKey(DimensionTypes.OVERWORLD) -> "o"
-                entry.matchesKey(DimensionTypes.THE_END) -> "e"
-                entry.matchesKey(DimensionTypes.THE_NETHER) -> "n"
+                entry.matchesKey(DimensionTypes.OVERWORLD) -> 0
+                entry.matchesKey(DimensionTypes.THE_NETHER) -> 1
+                entry.matchesKey(DimensionTypes.THE_END) -> 2
                 else -> return null
             }
         }
 
-        // URGENT: put these methods somewhere else
-        fun findNearestSettlementToPlayer(player: PlayerEntity): Settlement? {
-            val dim = getDimensionString(player.world.getDimensionEntry())
+        fun findNearestSettlement(entity: LivingEntity): Settlement? {
+            val dim = getDimensionString(entity.world.getDimensionEntry())
             return getInstance()
                 .getSettlements()
                 .filter { it.dim == dim }
-                .filter { it.pos.getSquaredDistance(player.pos) < 16384.0 }
-                .minByOrNull { it.pos.getSquaredDistance(player.pos) }
-        }
-
-        fun visitSettlement(entity: CustomVillagerEntity) {
-            val dim = getDimensionString(entity.world.getDimensionEntry())
-            getInstance()
-                .getSettlements()
-                .filter { it.dim == dim }
+                .filter { it.pos.getSquaredDistance(entity.pos) < 16384.0 }
                 .minByOrNull { it.pos.getSquaredDistance(entity.pos) }
-                ?.let { settlement ->
-                    LOGGER.info("Visiting village: {}", settlement.name)
-                    entity.getErrandsManager().add(Action.Type.MOVE, settlement.pos)
-                }
         }
 
-        fun joinSettlement(entity: CustomVillagerEntity) {
-            val dim = getDimensionString(entity.world.getDimensionEntry())
-            getInstance()
-                .getSettlements()
-                .filter { it.dim == dim }
-                .minByOrNull { it.pos.getSquaredDistance(entity.pos) }
-                ?.let { settlement ->
-                    settlement.addVillager(entity)
-                }
-        }
-
-        // // called when villager dies or decides to leave settlement
-        fun leaveSettlement(entity: CustomVillagerEntity) {
-            getInstance().findSettlement(entity.data.sid)?.let { settlement ->
-                settlement.removeVillager(entity.data.key)
-            }
-        }
-
-        fun attachStructure(
-            entity: CustomVillagerEntity,
-            sid: Int,
-        ) {
-            // add structure check to see if ID matches
-            getInstance().findSettlement(entity.data.sid)?.let { settlement ->
-                settlement.getStructure(sid)?.let { structure ->
-                    if (structure.getResidents().contains(entity.data.key)) {
-                        entity.getErrandsManager().assignStructure(
-                            sid,
-                            { key -> structure.getErrands(key) },
-                            structure.type == StructureType.HOUSE,
-                        )
-                    }
-                }
-            }
-        }
-
-        fun assignStructure(
-            entity: CustomVillagerEntity,
-            type: StructureType,
-        ) {
-            getInstance().findSettlement(entity.data.sid)?.let { settlement ->
-                settlement.getStructureByType(type)?.let { (id, structure) ->
-                    entity.getErrandsManager().assignStructure(
-                        id,
-                        { key -> structure.getErrands(key) },
-                        structure.type == StructureType.HOUSE,
-                    )
-                    structure.addResident(entity.data.key)
-                }
-            }
-        }
-
-        // defines villager profession based on level of nearest settlement (called once on spawn)
-        fun setProfession(entity: CustomVillagerEntity) {
-            getInstance().getSettlements().minByOrNull { it.pos.getSquaredDistance(entity.pos) }?.let { settlement ->
-                val professions = settlement.getProfessionsBySettlementLevel()
-                val profession = professions[entity.random.nextInt(professions.size)]
-                LOGGER.info("SETTING PROFESSION TO: {}", profession)
-                entity.setProfession(profession)
-            }
-        }
+        fun findSettlementById(sid: Int): Settlement? = getInstance().findSettlement(sid)
     }
 }

@@ -28,12 +28,17 @@ class ActGoal(
         this.setControls(EnumSet.of(Goal.Control.MOVE, Goal.Control.JUMP, Goal.Control.LOOK))
     }
 
+    // Goto : Action
+    // Path : Action
+    // Node : Action
+    // Free : Action
+
     override fun canStart(): Boolean {
         if (!entity.getErrandsManager().hasErrands()) return false
-        val n = entity.getErrandsManager().peek()
-        if (errand != n) {
+        val peek = entity.getErrandsManager().peek()
+        if (errand != peek) {
             resetState()
-            errand = n
+            errand = peek
         }
 
         if (path == null) {
@@ -65,37 +70,35 @@ class ActGoal(
                         entity.getLookControl().lookAt(target)
                     }
                     // TODO: handle special cases like flee
-                    if (entity.isAttacking() && cid != Action.Type.FLEE) {
-                        if (target.isAlive) {
-                            val npath = entity.navigation.findPathTo(target, 1)
-                            if (npath != null) {
-                                path = npath
-                            }
-                            distance
-                        } else {
-                            return
+                    if (entity.isAlive && entity.isAttacking()) {
+                        entity.navigation.findPathTo(target, 1)?.let { pathToTarget ->
+                            path = pathToTarget
                         }
+                        distance
                     } else {
                         null
                     }
                 } ?: run {
                     pos?.let {
+                        // val c = p.toCenterPos()
                         val point = it.toCenterPos()
                         var distance = entity.squaredDistanceTo(point)
+                        path = entity.navigation.findPathTo(point.x, point.y, point.z, 0)
                         if (action.shouldLook(distance)) {
                             entity.getLookControl().lookAt(point)
                         }
                         distance
                     } ?: 0.0
                 }
-
             if (action.shouldMove(distance)) {
                 path?.let {
-                    entity.getUp()
                     // lame implementation of Door openning
-                    Finder.findDoorBlock(entity.world, path!!)?.let {
-                        entity.getErrandsManager().add(it)
+                    if (cid != Action.Type.OPEN && cid != Action.Type.CLOSE) {
+                        Finder.findDoorBlock(entity.world, path!!)?.let {
+                            entity.getErrandsManager().add(it)
+                        }
                     }
+                    entity.getUp()
                     entity.navigation.startMovingAlong(
                         path,
                         if (entity.isUsingItem) {
@@ -115,12 +118,15 @@ class ActGoal(
 
                 if (ticksWithoutPath >= 20) {
                     // unable to find path
+                    // push random walk
+                    Finder.findSurfaceBlock(entity.blockPos.up(), world)?.let { err ->
+                        entity.getErrandsManager().add(err)
+                    }
                     LOGGER.info("> No path available, popping it")
-                    entity.getErrandsManager().pop()
+                    // entity.getErrandsManager().pop()
                     ticksWithoutPath = 0
                     return
                 }
-
             } else {
                 tickToTestCount++
             }

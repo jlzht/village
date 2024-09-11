@@ -10,7 +10,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.server.MinecraftServer;
-import com.village.mod.accessor.SettlementManagerAccessor;
 import java.util.concurrent.Executor;
 import net.minecraft.world.dimension.DimensionOptions;
 import net.minecraft.world.level.storage.LevelStorage;

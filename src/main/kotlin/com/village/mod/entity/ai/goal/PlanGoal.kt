@@ -2,7 +2,8 @@ package com.village.mod.entity.ai.goal
 
 import com.village.mod.LOGGER
 import com.village.mod.entity.village.CustomVillagerEntity
-import com.village.mod.world.SettlementManager
+import com.village.mod.village.structure.StructureType
+import com.village.mod.world.SettlementAccessor
 import net.minecraft.entity.ai.goal.Goal
 import java.util.EnumSet
 
@@ -24,25 +25,27 @@ class PlanGoal(
 
     override fun start() {
         if (entity.world.isClient) return
-        if (!entity.hasVillage()) {
-            SettlementManager.visitSettlement(entity)
-            SettlementManager.joinSettlement(entity)
+        val manager = entity.getErrandsManager()
+        if (manager.free == 0) {
+            SettlementAccessor.visitSettlement(entity)
+            SettlementAccessor.findSettlementToAttach(entity)
             // how to test if villager is interested in settling down?
+        } else if (!manager.hasSettlement()) {
+            SettlementAccessor.getSettlementToAttach(entity)
         } else {
-            val manager = entity.getErrandsManager()
-            // if (manager.homeID == 0) {
-            //    LOGGER.info("WILL LOOK FOR HOUSE")
-            //    SettlementManager.assignStructure(entity, StructureType.HOUSE)
-            // } else if (!manager.hasHome()) {
-            //    LOGGER.info("WILL ATTACH TO HOME - {}", manager.homeID)
-            //    SettlementManager.attachStructure(entity, manager.homeID)
-            // }
-            if (manager.workID == 0) {
+            if (manager.home == 0) {
+                LOGGER.info("WILL LOOK FOR HOUSE")
+                SettlementAccessor.findStructureToAttach(entity, StructureType.HOUSE)
+            } else if (!manager.hasHome()) {
+                LOGGER.info("WILL ATTACH TO HOME - {}", manager.home)
+                SettlementAccessor.getStructureToAttach(entity, manager.home)
+            }
+            if (manager.work == 0) {
                 entity.getProfession()?.let { profession ->
-                    SettlementManager.assignStructure(entity, profession.structureInterest)
+                    SettlementAccessor.findStructureToAttach(entity, profession.structureInterest)
                 }
             } else if (!manager.hasWork()) {
-                SettlementManager.attachStructure(entity, manager.workID)
+                SettlementAccessor.getStructureToAttach(entity, manager.work)
             }
             manager.update()
         }

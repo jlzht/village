@@ -11,24 +11,17 @@ import net.minecraft.screen.ScreenHandler
 import net.minecraft.screen.slot.Slot
 import net.minecraft.server.network.ServerPlayerEntity
 
-class TradingScreenHandler(syncId: Int, playerInventory: PlayerInventory) : ScreenHandler(Village.TRADING_SCREEN_HANDLER, syncId) {
+class TradingScreenHandler(
+    syncId: Int,
+    playerInventory: PlayerInventory,
+) : ScreenHandler(Village.TRADING_SCREEN_HANDLER, syncId) {
     constructor(syncId: Int, playerInventory: PlayerInventory, buf: PacketByteBuf) : this(syncId, playerInventory) {
         // Additional initialization logic if needed
     }
 
-    var inventory: Inventory = SimpleInventory(3)
+    var inventory: Inventory = SimpleInventory(3) // pass villager trader inventory
 
     init {
-        // for (i in 0 until 2) {
-        //    for (j in 0 until 3) {
-        //        addSlot(Slot(inventory, j + i * 2, 16 + j * 18, 34 + i * 18))
-        //    }
-        // }
-
-        //for (i in 0 until 3) {
-        //    addSlot(Slot(inventory, i * 2, 106 + i * 18, 42))
-        //}
-
         for (i in 0 until 3) {
             for (j in 0 until 9) {
                 addSlot(Slot(playerInventory, j + i * 9 + 9, 8 + j * 18, 84 + i * 18))
@@ -40,22 +33,15 @@ class TradingScreenHandler(syncId: Int, playerInventory: PlayerInventory) : Scre
     }
 
     override fun onContentChanged(inventory: Inventory) {
-        // merchantInventory.updateOffers()
         super.onContentChanged(inventory)
     }
 
-    override fun canUse(player: PlayerEntity): Boolean {
-        // return true
-        // return merchant.customer === player
-        return true
-    }
+    override fun canUse(player: PlayerEntity): Boolean = true
 
     override fun canInsertIntoSlot(
         stack: ItemStack,
         slot: Slot,
-    ): Boolean {
-        return false
-    }
+    ): Boolean = false
 
     override fun quickMove(
         player: PlayerEntity,
@@ -71,7 +57,6 @@ class TradingScreenHandler(syncId: Int, playerInventory: PlayerInventory) : Scre
                     return ItemStack.EMPTY
                 }
                 slot2.onQuickTransfer(itemStack2, itemStack)
-                // playYesSound()
             } else if (slot == 0 || slot == 1) {
                 if (!insertItem(itemStack2, 3, 39, false)) return ItemStack.EMPTY
             } else if (slot in 3 until 30) {
@@ -92,10 +77,6 @@ class TradingScreenHandler(syncId: Int, playerInventory: PlayerInventory) : Scre
 
     override fun onClosed(player: PlayerEntity) {
         super.onClosed(player)
-        // merchant.customer = null
-        // if (merchant.isClient) {
-        //    return
-        // }
         if (!player.isAlive || player is ServerPlayerEntity && player.isDisconnected) {
             for (i in 0..5) {
                 val itemStack = inventory.removeStack(i)
@@ -104,9 +85,6 @@ class TradingScreenHandler(syncId: Int, playerInventory: PlayerInventory) : Scre
                 }
             }
         } else if (player is ServerPlayerEntity) {
-            // for (i in 0..5) {
-            //     player.inventory.offerOrDrop(inventory.removeStack(i))
-            // }
         }
     }
 }
